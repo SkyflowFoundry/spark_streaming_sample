@@ -1,0 +1,24 @@
+fake_data:
+  one_card_fraction: 0.8                  # 80% of customers have one card
+  two_card_fraction: 0.15                 # 15% of customers have two cards
+                                          # 5% of customers have three cards
+
+seed_data:
+  total_customer_count: 1000      # Total number of customers to seed the initial DB/vault with
+  customers_file: seed-customers.csv
+  payments_file: seed-payments.csv
+  tokenized_customers_file: tokenized-customers.csv
+  tokenized_payments_file: tokenized-payments.csv
+  load_to_vault: true
+
+vault:
+  mgmt_url: 
+  account_id: p44ba0e083b041d98a207089b617714b
+  workspace_id: e85685e5c2c64939a995338f5f520248
+  vault_id: m19d0b1c6ebb49d58561f25a6b68b515
+  vault_url: https://ebfc9bee4242.vault.skyflowapis.com
+  private_key_file: ./credentials.json
+  max_rows_in_batch: 25
+
+# kafka_cluster:
+#   url: 

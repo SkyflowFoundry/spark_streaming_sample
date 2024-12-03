@@ -1,0 +1,71 @@
+
+package com.skyflow.walmartpoc;
+
+import java.util.UUID;
+
+import com.github.javafaker.Faker;
+
+public class PaymentInfo {
+    String paymentID;
+    String custID;
+    String creditCardNumber;
+    String cardExpiry;
+    String cardCVV;
+    String cardHolderFirstName;
+    String cardHolderLastName;
+    String cardHolderPhoneNumber;
+    String cardHolderAddressLine1;
+    String cardHolderAddressLine2;
+    String cardHolderAddressLine3;
+    String cardHolderCity;
+    String cardHolderState;
+    String cardHolderZip;
+    String cardHolderCountry;
+    String cardHolderEmail;
+    String cardHolderDateOfBirth;
+
+    PaymentInfo(Customer customer, Faker faker) {
+        this.paymentID = UUID.randomUUID().toString();
+        this.custID = customer.custID;
+        this.creditCardNumber = faker.finance().creditCard().replaceAll("-", "");
+        this.cardExpiry = String.format("%02d/%d", faker.number().numberBetween(1, 12), faker.number().numberBetween(2024, 2030));
+        this.cardCVV = String.format("%03d", faker.number().numberBetween(100, 999));
+
+        // Use customer's name and address for cardholder details
+        this.cardHolderFirstName = customer.firstName;
+        this.cardHolderLastName = customer.lastName;
+        this.cardHolderPhoneNumber = customer.phoneNumber;
+        this.cardHolderAddressLine1 = customer.addressLine1;
+        this.cardHolderAddressLine2 = customer.addressLine2;
+        this.cardHolderAddressLine3 = customer.addressLine3;
+        this.cardHolderCity = customer.city;
+        this.cardHolderState = customer.state;
+        this.cardHolderZip = customer.zip;
+        this.cardHolderCountry = customer.country;
+        this.cardHolderEmail = customer.email;
+        this.cardHolderDateOfBirth = customer.dateOfBirth;
+    }
+
+    PaymentInfo(String[] csvRecord) {
+        if (csvRecord.length != 16) {
+            throw new IllegalArgumentException("CSV record must have exactly 16 fields.");
+        }
+        this.paymentID = csvRecord[0];
+        this.custID = csvRecord[1];
+        this.creditCardNumber = csvRecord[2];
+        this.cardExpiry = csvRecord[3];
+        this.cardCVV = csvRecord[4];
+        this.cardHolderFirstName = csvRecord[5];
+        this.cardHolderLastName = csvRecord[6];
+        this.cardHolderPhoneNumber = csvRecord[7];
+        this.cardHolderAddressLine1 = csvRecord[8];
+        this.cardHolderAddressLine2 = csvRecord[9];
+        this.cardHolderAddressLine3 = csvRecord[10];
+        this.cardHolderCity = csvRecord[11];
+        this.cardHolderState = csvRecord[12];
+        this.cardHolderZip = csvRecord[13];
+        this.cardHolderCountry = csvRecord[14];
+        this.cardHolderEmail = csvRecord[15];
+        this.cardHolderDateOfBirth = csvRecord[16];
+    }
+}

@@ -1,0 +1,1635 @@
+{
+    "schemas": [
+      {
+        "name": "customeraccount",
+        "parentSchemaProperties": {
+          "parentID": "",
+          "isArray": false,
+          "tableType": "TT_BASE",
+          "parentFieldTags": [],
+          "name": ""
+        },
+        "fields": [
+          {
+            "name": "skyflow_id",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "ALL_OP"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "PLAIN_TEXT"
+                ]
+              },
+              {
+                "name": "skyflow.options.data_type",
+                "values": [
+                  "skyflow.SkyflowID"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "firstname",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "MODERATE_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "An individual's first, middle, or last name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "firstname"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "lastname",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "MODERATE_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "An individual's first, middle, or last name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "lastname"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "email",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "^(.).*?(.)?@(.+)"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "$1******$2@$3"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_FPT"
+                ]
+              },
+              {
+                "name": "skyflow.options.format_preserving_regex",
+                "values": [
+                  "^([a-z]{20})@([a-z]{10})\\.com$"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.data_type",
+                "values": [
+                  "skyflow.Email"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "An email address"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "email"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "phonenumber",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  ".*([0-9]{4})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "XXXXXX${1}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "column description for Details about a phone number"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "phonenumber"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "dateofbirth",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "REDACT"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "MODERATE_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_FPT"
+                ]
+              },
+              {
+                "name": "skyflow.options.format_preserving_regex",
+                "values": [
+                  "([0-9][0-9][0-9][0-9])(-0[1-9])(-[0-2][1-9])"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "column description for A date of birth in YYYY-MM-DD format"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "dateofbirth"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "addressline1",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "A generic street address usually contains the house number and street name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "addressline1"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "addressline2",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "A generic street address usually contains the house number and street name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "addressline2"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "addressline3",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "A generic street address usually contains the house number and street name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "addressline3"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "customerid",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "PLAIN_TEXT"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "ALL_OP"
+                ]
+              },
+              {
+                "name": "skyflow.options.unique",
+                "values": [
+                  "true"
+                ]
+              },
+              {
+                "name": "skyflow.options.index",
+                "values": [
+                  "true"
+                ]
+              },
+              {
+                "name": "skyflow.options.not_null",
+                "values": [
+                  "true"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "customer id from walmart. uuid. unique. used for upserts"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "customerid"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          }
+        ],
+        "childrenSchemas": [],
+        "schemaTags": [
+          {
+            "name": "skyflow.options.description",
+            "values": [
+              "customeraccount Table generated by lazybench"
+            ]
+          },
+          {
+            "name": "skyflow.options.display_name",
+            "values": [
+              "customeraccount"
+            ]
+          }
+        ],
+        "properties": {
+          "name": "",
+          "description": "",
+          "references": ""
+        }
+      },
+      {
+        "name": "customerpaymentdetails",
+        "parentSchemaProperties": {
+          "parentID": "",
+          "isArray": false,
+          "tableType": "TT_BASE",
+          "parentFieldTags": [],
+          "name": ""
+        },
+        "fields": [
+          {
+            "name": "skyflow_id",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "ALL_OP"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "PLAIN_TEXT"
+                ]
+              },
+              {
+                "name": "skyflow.options.data_type",
+                "values": [
+                  "skyflow.SkyflowID"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "creditcardnumber",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "[0-9 -]*([0-9 -]{4}$)"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "XXXXXXXXXXXX${1}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_FPT"
+                ]
+              },
+              {
+                "name": "skyflow.options.format_preserving_regex",
+                "values": [
+                  "^[0-9]{4}-[0-9]{4}-([0-9]{4})-([0-9]{4})$"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI",
+                  "NPI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.data_type",
+                "values": [
+                  "skyflow.CardNumber"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "Credit or debit card number"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "creditcardnumber"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "cardholderfirstname",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "MODERATE_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "An individual's first, middle, or last name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "cardholderfirstname"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "cardholderlastname",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "MODERATE_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "An individual's first, middle, or last name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "cardholderlastname"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "cardholderphonenumber",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  ".*([0-9]{4})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "XXXXXX${1}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "column description for Details about a phone number"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "cardholderphonenumber"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "cardholderaddressline1",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "A generic street address usually contains the house number and street name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "cardholderaddressline1"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "cardholderaddressline2",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "A generic street address usually contains the house number and street name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "cardholderaddressline2"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "cardholderaddressline3",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "(.).*(.{2})"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "${1}***${2}"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.configuration_tags",
+                "values": [
+                  "NULLABLE"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "A generic street address usually contains the house number and street name"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "cardholderaddressline3"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "cardholderemail",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "MASK"
+                ]
+              },
+              {
+                "name": "skyflow.options.find_pattern",
+                "values": [
+                  "^(.).*?(.)?@(.+)"
+                ]
+              },
+              {
+                "name": "skyflow.options.replace_pattern",
+                "values": [
+                  "$1******$2@$3"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_FPT"
+                ]
+              },
+              {
+                "name": "skyflow.options.format_preserving_regex",
+                "values": [
+                  "^([a-z]{20})@([a-z]{10})\\.com$"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.data_type",
+                "values": [
+                  "skyflow.Email"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "An email address"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "cardholderemail"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "cardholderdateofbirth",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "REDACT"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "MODERATE_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_FPT"
+                ]
+              },
+              {
+                "name": "skyflow.options.format_preserving_regex",
+                "values": [
+                  "([0-9][0-9][0-9][0-9])(-0[1-9])(-[0-2][1-9])"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "column description for A date of birth in YYYY-MM-DD format"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "cardholderdateofbirth"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "paymentid",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "PLAIN_TEXT"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "ALL_OP"
+                ]
+              },
+              {
+                "name": "skyflow.options.unique",
+                "values": [
+                  "true"
+                ]
+              },
+              {
+                "name": "skyflow.options.index",
+                "values": [
+                  "true"
+                ]
+              },
+              {
+                "name": "skyflow.options.not_null",
+                "values": [
+                  "true"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "payment id from Walmart, which is a UUID. Unique key, used for upserts"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "paymentid"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
+            "name": "card_cvv",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "REDACT"
+                ]
+              },
+              {
+                "name": "skyflow.options.identifiability",
+                "values": [
+                  "HIGH_IDENTIFIABILITY"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "EXACT_MATCH"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "NON_DETERMINISTIC_TRANSIENT_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.ttl",
+                "values": [
+                  "20160"
+                ]
+              },
+              {
+                "name": "skyflow.options.personal_information_type",
+                "values": [
+                  "PII",
+                  "PHI",
+                  "NPI"
+                ]
+              },
+              {
+                "name": "skyflow.options.privacy_law",
+                "values": [
+                  "GDPR",
+                  "CCPA",
+                  "HIPAA"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "A credit Card Verification Value (CVV) is a numerical 3/4 digit code used in card transactions"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "card_cvv"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          }
+        ],
+        "childrenSchemas": [],
+        "schemaTags": [
+          {
+            "name": "skyflow.options.description",
+            "values": [
+              "customerpaymentdetails Table generated by lazybench"
+            ]
+          },
+          {
+            "name": "skyflow.options.display_name",
+            "values": [
+              "customerpaymentdetails"
+            ]
+          }
+        ],
+        "properties": {
+          "name": "",
+          "description": "",
+          "references": ""
+        }
+      }
+    ],
+    "tags": []
+  }

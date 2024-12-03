@@ -1,0 +1,7 @@
+fake_data:
+  total_seeded_customers: 1000  # Example value, adjust as needed
+  total_upserts: 100            # Example value, adjust as needed
+  batch_size: 10                # Example value, adjust as needed
+  one_card_pct: 0.5             # 50% of customers have one card
+  two_card_pct: 0.3             # 30% of customers have two cards
+  three_card_pct: 0.2           # 20% of customers have three cards

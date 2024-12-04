@@ -7,6 +7,8 @@ import com.github.javafaker.Faker;
 import com.github.javafaker.Name;
 
 public class Customer {
+    static final String CUSTOMER_CSV_HEADER[] = new String[]{"CustID", "FirstName", "LastName", "Email", "PhoneNumber", "DateOfBirth", "AddressLine1", "AddressLine2", "AddressLine3", "City", "State", "Zip", "Country"};
+
     String custID;
     String firstName;
     String lastName;
@@ -57,5 +59,24 @@ public class Customer {
         this.state = csvRecord[10];
         this.zip = csvRecord[11];
         this.country = csvRecord[12];
+    }
+
+    @Override
+    public String toString() {
+        return "Customer{" +
+                "custID='" + custID + '\'' +
+                ", firstName='" + firstName + '\'' +
+                ", lastName='" + lastName + '\'' +
+                ", email='" + email + '\'' +
+                ", phoneNumber='" + phoneNumber + '\'' +
+                ", dateOfBirth='" + dateOfBirth + '\'' +
+                ", addressLine1='" + addressLine1 + '\'' +
+                ", addressLine2='" + addressLine2 + '\'' +
+                ", addressLine3='" + addressLine3 + '\'' +
+                ", city='" + city + '\'' +
+                ", state='" + state + '\'' +
+                ", zip='" + zip + '\'' +
+                ", country='" + country + '\'' +
+                '}';
     }
 }

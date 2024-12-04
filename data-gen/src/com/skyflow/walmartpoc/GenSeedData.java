@@ -51,8 +51,8 @@ public class GenSeedData {
         }
 
         // Write headers
-        customerWriter.writeNext(new String[]{"CustID", "FirstName", "LastName", "Email", "PhoneNumber", "DateOfBirth", "AddressLine1", "AddressLine2", "AddressLine3", "City", "State", "Zip", "Country"});
-        paymentWriter.writeNext(new String[]{"PaymentID", "CustID", "CreditCardNumber", "CardExpiry", "CardCVV", "CardHolderFirstName", "CardHolderLastName", "CardHolderPhoneNumber", "CardHolderAddressLine1", "CardHolderAddressLine2", "CardHolderAddressLine3", "CardHolderCity", "CardHolderState", "CardHolderZip", "CardHolderCountry", "CardHolderEmail", "CardHolderDateOfBirth"});
+        customerWriter.writeNext(Customer.CUSTOMER_CSV_HEADER);
+        paymentWriter.writeNext(PaymentInfo.PAYMENT_CSV_HEADER);
         tokenizedCustomerWriter.writeNext(new String[]{"skyflow_id","CustID", "FirstName", "LastName", "Email", "PhoneNumber", "DateOfBirth", "AddressLine1", "AddressLine2", "AddressLine3", "City", "State", "Zip", "Country"});
         tokenizedPaymentWriter.writeNext(new String[]{"skyflow_id","PaymentID", "CustID", "CreditCardNumber", "CardExpiry", "CardCVV", "CardHolderFirstName", "CardHolderLastName", "CardHolderPhoneNumber", "CardHolderAddressLine1", "CardHolderAddressLine2", "CardHolderAddressLine3", "CardHolderCity", "CardHolderState", "CardHolderZip", "CardHolderCountry", "CardHolderEmail", "CardHolderDateOfBirth"});
 

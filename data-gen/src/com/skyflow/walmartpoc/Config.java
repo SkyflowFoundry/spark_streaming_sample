@@ -20,6 +20,10 @@ public class Config {
         public float one_card_fraction;
         public float two_card_fraction;
     }
+    public static class UpsertProbabilities {
+        public float insert_customer_probability;
+        public float add_payment_probability;
+    }
     public static class VaultConfig {
         public String mgmt_url;
         public String account_id;
@@ -33,6 +37,7 @@ public class Config {
     public FakeData fake_data;
     public SeedData seed_data;
     public VaultConfig vault;
+    public UpsertProbabilities upsert_probabilities;
 
 
     public static Config load(String yamlFilePath) throws IOException {

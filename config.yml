@@ -20,5 +20,11 @@ vault:
   private_key_file: ./credentials.json
   max_rows_in_batch: 25
 
+upsert_probabilities:
+  # Must be less than 1
+  insert_customer_probability: 0.1
+  add_payment_probability: 0.1
+  # The rest is the probability we will update an existing customer
+
 # kafka_cluster:
 #   url: 

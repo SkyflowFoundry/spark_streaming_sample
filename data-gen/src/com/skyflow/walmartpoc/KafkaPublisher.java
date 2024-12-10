@@ -1,38 +1,30 @@
 package com.skyflow.walmartpoc;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Properties;
 
-import org.apache.avro.Schema;
-import org.apache.avro.io.DatumWriter;
-import org.apache.avro.io.Encoder;
-import org.apache.avro.io.EncoderFactory;
-import org.apache.avro.reflect.ReflectData;
-import org.apache.avro.reflect.ReflectDatumWriter;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
 import com.github.javafaker.Faker;
 
 
-public class KafkaPublisher<T> implements AutoCloseable {
+public class KafkaPublisher<T extends JsonSerializable> implements AutoCloseable {
 
-    final Schema schema;
-    final KafkaProducer<String, byte[]> producer;
+    final KafkaProducer<String, String> producer;
     final String topic;
 
     KafkaPublisher(String brokerServer, String topic, Class<T> clazz) {
-        Properties props = new Properties();props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerServer);
+        Properties props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerServer);
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.RETRIES_CONFIG, 0);
         props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 100000);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         // AWS MSK specific config
         props.put("security.protocol", "SASL_SSL");
         props.put("sasl.mechanism", "AWS_MSK_IAM");
@@ -40,9 +32,6 @@ public class KafkaPublisher<T> implements AutoCloseable {
         props.put("sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler");
 
         this.topic = topic;
-
-        // In a production setup, we would not be doing this via reflection
-        schema = ReflectData.get().getSchema(clazz);
 
         producer = new KafkaProducer<>(props);
     }
@@ -55,17 +44,8 @@ public class KafkaPublisher<T> implements AutoCloseable {
     }
 
     public void send(T object, Callback callback) throws IOException {
-        ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, objectToAvroBytes(object));
+        ProducerRecord<String, String> record = new ProducerRecord<>(topic, object.toJSONString());
         producer.send(record, callback);
-    }
-
-    protected byte[] objectToAvroBytes(T object) throws IOException {
-        DatumWriter<T> writer = new ReflectDatumWriter<>(schema);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        Encoder encoder = EncoderFactory.get().binaryEncoder(out, null);
-        writer.write(object, encoder);
-        encoder.flush();
-        return out.toByteArray();
     }
 
     public static void main(String[] args) throws Exception {

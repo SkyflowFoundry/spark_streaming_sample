@@ -5,7 +5,7 @@ import java.util.UUID;
 
 import com.github.javafaker.Faker;
 
-public class PaymentInfo {
+public class PaymentInfo implements JsonSerializable {
     static final String PAYMENT_CSV_HEADER[] = new String[]{"PaymentID", "CustID", "CreditCardNumber", "CardExpiry", "CardCVV", "CardHolderFirstName", "CardHolderLastName", "CardHolderPhoneNumber", "CardHolderAddressLine1", "CardHolderAddressLine2", "CardHolderAddressLine3", "CardHolderCity", "CardHolderState", "CardHolderZip", "CardHolderCountry", "CardHolderEmail", "CardHolderDateOfBirth"};
 
     String paymentID;
@@ -93,4 +93,27 @@ public class PaymentInfo {
                 ", cardHolderDateOfBirth='" + cardHolderDateOfBirth + '\'' +
                 '}';
     }
+
+    @Override
+    public  String toJSONString() {
+        return "{" +
+                "\"paymentID\":\"" + paymentID + "\"," +
+                "\"custID\":\"" + custID + "\"," +
+                "\"creditCardNumber\":\"" + creditCardNumber + "\"," +
+                "\"cardExpiry\":\"" + cardExpiry + "\"," +
+                "\"cardCVV\":\"" + cardCVV + "\"," +
+                "\"cardHolderFirstName\":\"" + cardHolderFirstName + "\"," +
+                "\"cardHolderLastName\":\"" + cardHolderLastName + "\"," +
+                "\"cardHolderPhoneNumber\":\"" + cardHolderPhoneNumber + "\"," +
+                "\"cardHolderAddressLine1\":\"" + cardHolderAddressLine1 + "\"," +
+                "\"cardHolderAddressLine2\":\"" + cardHolderAddressLine2 + "\"," +
+                "\"cardHolderAddressLine3\":\"" + cardHolderAddressLine3 + "\"," +
+                "\"cardHolderCity\":\"" + cardHolderCity + "\"," +
+                "\"cardHolderState\":\"" + cardHolderState + "\"," +
+                "\"cardHolderZip\":\"" + cardHolderZip + "\"," +
+                "\"cardHolderCountry\":\"" + cardHolderCountry + "\"," +
+                "\"cardHolderEmail\":\"" + cardHolderEmail + "\"," +
+                "\"cardHolderDateOfBirth\":\"" + cardHolderDateOfBirth + "\"" +
+                "}";
+        }
 }

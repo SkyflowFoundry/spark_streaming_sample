@@ -6,7 +6,7 @@ import com.github.javafaker.Address;
 import com.github.javafaker.Faker;
 import com.github.javafaker.Name;
 
-public class Customer {
+public class Customer implements JsonSerializable {
     static final String CUSTOMER_CSV_HEADER[] = new String[]{"CustID", "FirstName", "LastName", "Email", "PhoneNumber", "DateOfBirth", "AddressLine1", "AddressLine2", "AddressLine3", "City", "State", "Zip", "Country"};
 
     String custID;
@@ -78,5 +78,24 @@ public class Customer {
                 ", zip='" + zip + '\'' +
                 ", country='" + country + '\'' +
                 '}';
+    }
+
+    @Override
+    public  String toJSONString() {
+        return "{" +
+                "\"custID\":\"" + custID + "\"," +
+                "\"firstName\":\"" + firstName + "\"," +
+                "\"lastName\":\"" + lastName + "\"," +
+                "\"email\":\"" + email + "\"," +
+                "\"phoneNumber\":\"" + phoneNumber + "\"," +
+                "\"dateOfBirth\":\"" + dateOfBirth + "\"," +
+                "\"addressLine1\":\"" + addressLine1 + "\"," +
+                "\"addressLine2\":\"" + addressLine2 + "\"," +
+                "\"addressLine3\":\"" + addressLine3 + "\"," +
+                "\"city\":\"" + city + "\"," +
+                "\"state\":\"" + state + "\"," +
+                "\"zip\":\"" + zip + "\"," +
+                "\"country\":\"" + country + "\"" +
+                "}";
     }
 }

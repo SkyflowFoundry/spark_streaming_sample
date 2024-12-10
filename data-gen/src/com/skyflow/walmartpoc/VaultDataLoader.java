@@ -53,6 +53,7 @@ public class VaultDataLoader {
         this.skyflow_client = Skyflow.init(skyflowConfig);
     }
 
+    @SuppressWarnings("unchecked")
     public String loadCustomerIntoVault(Customer customer) throws Exception {
         // TBD make more efficient by doing this in a batch
 
@@ -103,6 +104,7 @@ public class VaultDataLoader {
         return (String) extractedFields.get("skyflow_id");
     }
 
+    @SuppressWarnings("unchecked")
     public String loadPaymentInfoIntoVault(PaymentInfo payment) throws Exception {
         // TBD make more efficient by doing this in a batch
 

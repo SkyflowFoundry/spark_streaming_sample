@@ -8,6 +8,8 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.github.javafaker.Faker;
 
@@ -56,19 +58,24 @@ public class KafkaPublisher<T extends JsonSerializable> implements AutoCloseable
         String brokerServer = args[0];
         String topicName = args[1];
 
+        System.setProperty("org.slf4j.simpleLogger.showDateTime", "true");
+        System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "yyyy-MM-dd HH:mm:ss");
+        System.setProperty("org.slf4j.simpleLogger.logFile", "System.out");
+        System.setProperty("org.slf4j.simpleLogger.log.org.slf4j.MDC", "instanceId");
+        Logger logger = LoggerFactory.getLogger(KafkaPublisher.class);
+
         try (KafkaPublisher<Customer> producer = new KafkaPublisher<>(brokerServer, topicName, Customer.class);) {
             Customer customer = new Customer(new Faker());
 
-            System.out.println("sending message...");
+            logger.info("sending message...");
             producer.send(customer, (metadata, exception) -> {
                 if (exception != null) {
-                    System.out.println("Message sending failed: " + exception.getMessage());
-                    exception.printStackTrace();
+                    logger.error("Message sending failed: {}", exception.getMessage(), exception);
                 } else {
-                    System.out.println("Message sent successfully to topic " + metadata.topic() + " partition " + metadata.partition() + " with offset " + metadata.offset());
+                    logger.info("Message sent successfully to topic {} partition {} with offset {}", metadata.topic(), metadata.partition(), metadata.offset());
                 }
             });
         }
-        System.out.println("sent message...");
+        logger.info("sent message...");
     }
 }

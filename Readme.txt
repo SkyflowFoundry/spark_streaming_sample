@@ -1,20 +1,24 @@
 Requriments:
-Maven and Java
+JDK version 1.8. Don't get a later version. Or earlier.
+Scala > 2.12. I have Scala 3
+Maven
 Make sure you have a vault (schema is in vaultSchema.json). Add its details to config.yml
-Make sure you have a service accounts. Download credentials.json. Update config if needed.
+Make sure you have a service accounts. Download credentials.json. Update config as needed.
 
+data-generator
 Build:
-data-generator (and loader)
 Go to data-gen directory
 mvn clean (if needed)
-mvn package assembly:single
+mvn package install assembly:single
 Now target has a jar file named: SyntheticDataGenerator-1.0-SNAPSHOT-jar-with-dependencies.jar
 
 Running:
 To generate data update config.yml and run:
-java -cp target/SyntheticDataGenerator-1.0-SNAPSHOT-jar-with-dependencies.jar com.skyflow.walmartpoc.GenSeedData path/to/config.yml path/to/desired/outputdir
+java -cp target/SyntheticDataGenerator-1.0-SNAPSHOT-jar-with-dependencies.jar com.skyflow.walmartpoc.<class with main> path/to/config.yml <other-args>
 
-Results in:
-Synthetic customers and payments data generated.
-CSV files being created as specified in the config.yml.
-Data loaded into the vault.
+
+emr-task:
+Prereqs: data-generator is built & deployed to local maven repo
+Build:
+mvn package assembly:single
+Now, target has a jar file emr-task-<version>-jar-with-dependencies.jar

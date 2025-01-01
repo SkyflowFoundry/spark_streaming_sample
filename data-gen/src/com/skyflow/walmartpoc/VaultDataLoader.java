@@ -12,13 +12,14 @@ import com.skyflow.entities.InsertOptions;
 import com.skyflow.entities.ResponseToken;
 import com.skyflow.entities.SkyflowConfiguration;
 import com.skyflow.entities.TokenProvider;
+import com.skyflow.entities.UpsertOption;
 import com.skyflow.serviceaccount.util.Token;
 import com.skyflow.vault.Skyflow;
 
 
-public class VaultDataLoader {
+public class VaultDataLoader<T extends JsonSerializable> {
 
-    static class TokenGiver implements TokenProvider {
+    public static class TokenGiver implements TokenProvider {
 
         private final long TOKEN_EXIPIRATION_GRACE_SEC = 0;
 
@@ -26,9 +27,12 @@ public class VaultDataLoader {
         private long renewAtTime;
         private final String credentialsString;
 
+        public TokenGiver(String credentialsString) {
+            this.credentialsString = credentialsString;
+        }
+
         TokenGiver(Config config) throws Exception {
-            String credentialsFile = config.vault.private_key_file;
-            this.credentialsString = new String(Files.readAllBytes(Paths.get(credentialsFile)));
+            this(new String(Files.readAllBytes(Paths.get(config.vault.private_key_file))));
         }
 
         @Override
@@ -44,46 +48,45 @@ public class VaultDataLoader {
     }
 
     private final Skyflow skyflow_client;
+    @SuppressWarnings("unused")
+    private final int batch_size;
+    private final String tableName;
+    private final InsertOptions insertOptions;
 
-    public VaultDataLoader(Config config) throws Exception {
-        TokenGiver access_token_generator = new TokenGiver(config);
-        SkyflowConfiguration skyflowConfig = new SkyflowConfiguration(config.vault.vault_id,
-                                                                      config.vault.vault_url,
+    public VaultDataLoader(String vault_id, String vault_url, int max_rows_in_batch, TokenGiver access_token_generator, String tableName, String upsertColumnName) throws Exception {
+        SkyflowConfiguration skyflowConfig = new SkyflowConfiguration(vault_id,
+                                                                      vault_url,
                                                                       access_token_generator);
         this.skyflow_client = Skyflow.init(skyflowConfig);
+        this.batch_size = max_rows_in_batch;
+        this.tableName = tableName;
+        UpsertOption[] upsertOptions = null;
+        if (upsertColumnName!=null) {
+            upsertOptions = new UpsertOption[1];
+            upsertOptions[0] = new UpsertOption(tableName, upsertColumnName);
+        }
+        this.insertOptions = new InsertOptions(
+            true, upsertOptions, false
+        );
     }
 
     @SuppressWarnings("unchecked")
-    public String loadCustomerIntoVault(Customer customer) throws Exception {
+    public String loadObjectIntoVault(T object) throws Exception {
         // TBD make more efficient by doing this in a batch
 
-        
         // construct insert input
         JSONObject records = new JSONObject();
         JSONArray recordsArray = new JSONArray();
 
         JSONObject record = new JSONObject();
-        record.put("table", "customeraccount");
+        record.put("table", this.tableName);
 
-        JSONObject fields = new JSONObject();
-        fields.put("customerid", customer.custID);
-        fields.put("firstname", customer.firstName);
-        fields.put("lastname", customer.lastName);
-        fields.put("email", customer.email);
-        fields.put("phonenumber", customer.phoneNumber);
-        fields.put("dateofbirth", customer.dateOfBirth);
-        fields.put("addressline1", customer.addressLine1);
-        fields.put("addressline2", customer.addressLine2);
-        fields.put("addressline3", customer.addressLine3);
+        JSONObject fields = object.jsonObjectForVault();
 
         record.put("fields", fields);
         recordsArray.add(record);
         records.put("records", recordsArray);
 
-        // Indicates whether or not tokens should be returned for the inserted data. Defaults to 'True'
-        InsertOptions insertOptions = new InsertOptions(
-                    true, false
-                );
         JSONObject insertResponse = this.skyflow_client.insert(records,insertOptions);
 
         JSONArray responseRecords = (JSONArray) insertResponse.get("records");
@@ -91,72 +94,9 @@ public class VaultDataLoader {
         JSONObject extractedFields = (JSONObject) firstRecord.get("fields");
         //System.out.println(extractedFields.toJSONString());
 
-        // Extract the values from the JSONObject extractedFields and update the customer record with the new values
-        customer.firstName = (String) extractedFields.get("firstname");
-        customer.lastName = (String) extractedFields.get("lastname");
-        customer.email = (String) extractedFields.get("email");
-        customer.phoneNumber = (String) extractedFields.get("phonenumber");
-        customer.dateOfBirth = (String) extractedFields.get("dateofbirth");
-        customer.addressLine1 = (String) extractedFields.get("addressline1");
-        customer.addressLine2 = (String) extractedFields.get("addressline2");
-        customer.addressLine3 = (String) extractedFields.get("addressline3");
+        // Extract the values from the JSONObject extractedFields and update the record with the new values
+        object.replaceFieldsFromVault(extractedFields);
 
         return (String) extractedFields.get("skyflow_id");
     }
-
-    @SuppressWarnings("unchecked")
-    public String loadPaymentInfoIntoVault(PaymentInfo payment) throws Exception {
-        // TBD make more efficient by doing this in a batch
-
-        
-        // construct insert input
-        JSONObject records = new JSONObject();
-        JSONArray recordsArray = new JSONArray();
-
-        JSONObject record = new JSONObject();
-        record.put("table", "customerpaymentdetails");
-
-        JSONObject fields = new JSONObject();
-        fields.put("paymentid", payment.paymentID);
-        fields.put("creditcardnumber", payment.creditCardNumber);
-        fields.put("card_cvv", payment.cardCVV);
-        fields.put("cardholderfirstname", payment.cardHolderFirstName);
-        fields.put("cardholderlastname", payment.cardHolderLastName);
-        fields.put("cardholderphonenumber", payment.cardHolderPhoneNumber);
-        fields.put("cardholderaddressline1", payment.cardHolderAddressLine1);
-        fields.put("cardholderaddressline2", payment.cardHolderAddressLine2);
-        fields.put("cardholderaddressline3", payment.cardHolderAddressLine3);
-        fields.put("cardholderemail", payment.cardHolderEmail);
-        fields.put("cardholderdateofbirth", payment.cardHolderDateOfBirth);
-
-        record.put("fields", fields);
-        recordsArray.add(record);
-        records.put("records", recordsArray);
-
-        // Indicates whether or not tokens should be returned for the inserted data. Defaults to 'True'
-        InsertOptions insertOptions = new InsertOptions(
-                    true, false
-                );
-        JSONObject insertResponse = this.skyflow_client.insert(records,insertOptions);
-
-        JSONArray responseRecords = (JSONArray) insertResponse.get("records");
-        JSONObject firstRecord = (JSONObject) ((JSONArray) responseRecords).get(0);
-        JSONObject extractedFields = (JSONObject) firstRecord.get("fields");
-        //System.out.println(extractedFields.toJSONString());
-
-        // Extract the values from the JSONObject extractedFields and update the customer record with the new values
-        payment.creditCardNumber = (String) extractedFields.get("creditcardnumber");
-        payment.cardCVV = (String) extractedFields.get("card_cvv");
-        payment.cardHolderFirstName = (String) extractedFields.get("cardholderfirstname");
-        payment.cardHolderLastName = (String) extractedFields.get("cardholderlastname");
-        payment.cardHolderPhoneNumber = (String) extractedFields.get("cardholderphonenumber");
-        payment.cardHolderAddressLine1 = (String) extractedFields.get("cardholderaddressline1");
-        payment.cardHolderAddressLine2 = (String) extractedFields.get("cardholderaddressline2");
-        payment.cardHolderAddressLine3 = (String) extractedFields.get("cardholderaddressline3");
-        payment.cardHolderEmail = (String) extractedFields.get("cardholderemail");
-        payment.cardHolderDateOfBirth = (String) extractedFields.get("cardholderdateofbirth");
-
-        return (String) extractedFields.get("skyflow_id");
-    }
-
 }

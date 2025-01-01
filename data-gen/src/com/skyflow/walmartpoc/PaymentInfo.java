@@ -3,10 +3,15 @@ package com.skyflow.walmartpoc;
 
 import java.util.UUID;
 
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+
 import com.github.javafaker.Faker;
 
 public class PaymentInfo implements JsonSerializable {
     static final String PAYMENT_CSV_HEADER[] = new String[]{"PaymentID", "CustID", "CreditCardNumber", "CardExpiry", "CardCVV", "CardHolderFirstName", "CardHolderLastName", "CardHolderPhoneNumber", "CardHolderAddressLine1", "CardHolderAddressLine2", "CardHolderAddressLine3", "CardHolderCity", "CardHolderState", "CardHolderZip", "CardHolderCountry", "CardHolderEmail", "CardHolderDateOfBirth"};
+    public static final String TABLE_NAME = "customerpaymentdetails";
+    public static final String UPSERT_COLUMN = "paymentid";
 
     String paymentID;
     String custID;
@@ -71,6 +76,33 @@ public class PaymentInfo implements JsonSerializable {
         this.cardHolderDateOfBirth = csvRecord[16];
     }
 
+    public PaymentInfo(String jsonString) {
+        try {
+            JSONParser parser = new org.json.simple.parser.JSONParser();
+            JSONObject jsonObject = (org.json.simple.JSONObject) parser.parse(jsonString);
+
+            this.paymentID = (String) jsonObject.get("paymentID");
+            this.custID = (String) jsonObject.get("custID");
+            this.creditCardNumber = (String) jsonObject.get("creditCardNumber");
+            this.cardExpiry = (String) jsonObject.get("cardExpiry");
+            this.cardCVV = (String) jsonObject.get("cardCVV");
+            this.cardHolderFirstName = (String) jsonObject.get("cardHolderFirstName");
+            this.cardHolderLastName = (String) jsonObject.get("cardHolderLastName");
+            this.cardHolderPhoneNumber = (String) jsonObject.get("cardHolderPhoneNumber");
+            this.cardHolderAddressLine1 = (String) jsonObject.get("cardHolderAddressLine1");
+            this.cardHolderAddressLine2 = (String) jsonObject.get("cardHolderAddressLine2");
+            this.cardHolderAddressLine3 = (String) jsonObject.get("cardHolderAddressLine3");
+            this.cardHolderCity = (String) jsonObject.get("cardHolderCity");
+            this.cardHolderState = (String) jsonObject.get("cardHolderState");
+            this.cardHolderZip = (String) jsonObject.get("cardHolderZip");
+            this.cardHolderCountry = (String) jsonObject.get("cardHolderCountry");
+            this.cardHolderEmail = (String) jsonObject.get("cardHolderEmail");
+            this.cardHolderDateOfBirth = (String) jsonObject.get("cardHolderDateOfBirth");
+        } catch (org.json.simple.parser.ParseException e) {
+            throw new IllegalArgumentException("Invalid JSON string", e);
+        }
+    }
+
     @Override
     public String toString() {
         return "PaymentInfo{" +
@@ -116,4 +148,88 @@ public class PaymentInfo implements JsonSerializable {
                 "\"cardHolderDateOfBirth\":\"" + cardHolderDateOfBirth + "\"" +
                 "}";
         }
+
+    public void replaceFieldsFromJson(String json) {
+        try {
+            JSONParser parser = new JSONParser();
+            JSONObject jsonObject = (JSONObject) parser.parse(json);
+            replaceFieldsFromVault(jsonObject);
+        } catch (org.json.simple.parser.ParseException e) {
+            throw new IllegalArgumentException("Invalid JSON string", e);
+        }
+    }
+
+    @Override
+    public void replaceFieldsFromVault(JSONObject jsonObject) {
+        if (jsonObject.containsKey("paymentid")) {
+            this.paymentID = (String) jsonObject.get("paymentid");
+        }
+        if (jsonObject.containsKey("customerid")) {
+            this.custID = (String) jsonObject.get("customerid");
+        }
+        if (jsonObject.containsKey("creditcardnumber")) {
+            this.creditCardNumber = (String) jsonObject.get("creditcardnumber");
+        }
+        if (jsonObject.containsKey("cardExpiry")) {
+            this.cardExpiry = (String) jsonObject.get("cardExpiry");
+        }
+        if (jsonObject.containsKey("card_cvv")) {
+            this.cardCVV = (String) jsonObject.get("card_cvv");
+        }
+        if (jsonObject.containsKey("cardholderfirstname")) {
+            this.cardHolderFirstName = (String) jsonObject.get("cardholderfirstname");
+        }
+        if (jsonObject.containsKey("cardholderlastname")) {
+            this.cardHolderLastName = (String) jsonObject.get("cardholderlastname");
+        }
+        if (jsonObject.containsKey("cardholderphonenumber")) {
+            this.cardHolderPhoneNumber = (String) jsonObject.get("cardholderphonenumber");
+        }
+        if (jsonObject.containsKey("cardholderaddressline1")) {
+            this.cardHolderAddressLine1 = (String) jsonObject.get("cardholderaddressline1");
+        }
+        if (jsonObject.containsKey("cardholderaddressline2")) {
+            this.cardHolderAddressLine2 = (String) jsonObject.get("cardholderaddressline2");
+        }
+        if (jsonObject.containsKey("cardholderaddressline3")) {
+            this.cardHolderAddressLine3 = (String) jsonObject.get("cardholderaddressline3");
+        }
+        if (jsonObject.containsKey("cardHolderCity")) {
+            this.cardHolderCity = (String) jsonObject.get("cardHolderCity");
+        }
+        if (jsonObject.containsKey("cardHolderState")) {
+            this.cardHolderState = (String) jsonObject.get("cardHolderState");
+        }
+        if (jsonObject.containsKey("cardHolderZip")) {
+            this.cardHolderZip = (String) jsonObject.get("cardHolderZip");
+        }
+        if (jsonObject.containsKey("cardHolderCountry")) {
+            this.cardHolderCountry = (String) jsonObject.get("cardHolderCountry");
+        }
+        if (jsonObject.containsKey("cardholderemail")) {
+            this.cardHolderEmail = (String) jsonObject.get("cardholderemail");
+        }
+        if (jsonObject.containsKey("cardholderdateofbirth")) {
+            this.cardHolderDateOfBirth = (String) jsonObject.get("cardholderdateofbirth");
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public JSONObject jsonObjectForVault() {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("paymentid", this.paymentID);
+        jsonObject.put("creditcardnumber", this.creditCardNumber);
+        jsonObject.put("cardexpiry", this.cardExpiry);
+        jsonObject.put("cardcvv", this.cardCVV);
+        jsonObject.put("cardholderfirstname", this.cardHolderFirstName);
+        jsonObject.put("cardholderlastname", this.cardHolderLastName);
+        jsonObject.put("cardholderphonenumber", this.cardHolderPhoneNumber);
+        jsonObject.put("cardholderaddressline1", this.cardHolderAddressLine1);
+        jsonObject.put("cardholderaddressline2", this.cardHolderAddressLine2);
+        jsonObject.put("cardholderaddressline3", this.cardHolderAddressLine3);
+        jsonObject.put("cardholderemail", this.cardHolderEmail);
+        jsonObject.put("cardholderdateofbirth", this.cardHolderDateOfBirth);
+        return jsonObject;
+    }
 }

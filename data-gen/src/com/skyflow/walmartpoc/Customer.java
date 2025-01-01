@@ -2,13 +2,18 @@ package com.skyflow.walmartpoc;
 
 import java.util.UUID;
 
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+
 import com.github.javafaker.Address;
 import com.github.javafaker.Faker;
 import com.github.javafaker.Name;
 
 public class Customer implements JsonSerializable {
     static final String CUSTOMER_CSV_HEADER[] = new String[]{"CustID", "FirstName", "LastName", "Email", "PhoneNumber", "DateOfBirth", "AddressLine1", "AddressLine2", "AddressLine3", "City", "State", "Zip", "Country"};
-
+    public static final String TABLE_NAME = "customeraccount";
+    public static final String UPSERT_COLUMN = "customerid";
+    
     String custID;
     String firstName;
     String lastName;
@@ -61,6 +66,29 @@ public class Customer implements JsonSerializable {
         this.country = csvRecord[12];
     }
 
+    public Customer(String jsonString) {
+        try {
+            org.json.simple.parser.JSONParser parser = new JSONParser();
+            org.json.simple.JSONObject jsonObject = (JSONObject) parser.parse(jsonString);
+
+            this.custID = (String) jsonObject.get("custID");
+            this.firstName = (String) jsonObject.get("firstName");
+            this.lastName = (String) jsonObject.get("lastName");
+            this.email = (String) jsonObject.get("email");
+            this.phoneNumber = (String) jsonObject.get("phoneNumber");
+            this.dateOfBirth = (String) jsonObject.get("dateOfBirth");
+            this.addressLine1 = (String) jsonObject.get("addressLine1");
+            this.addressLine2 = (String) jsonObject.get("addressLine2");
+            this.addressLine3 = (String) jsonObject.get("addressLine3");
+            this.city = (String) jsonObject.get("city");
+            this.state = (String) jsonObject.get("state");
+            this.zip = (String) jsonObject.get("zip");
+            this.country = (String) jsonObject.get("country");
+        } catch (org.json.simple.parser.ParseException e) {
+            throw new IllegalArgumentException("Invalid JSON string", e);
+        }
+    }
+
     @Override
     public String toString() {
         return "Customer{" +
@@ -81,7 +109,7 @@ public class Customer implements JsonSerializable {
     }
 
     @Override
-    public  String toJSONString() {
+    public String toJSONString() {
         return "{" +
                 "\"custID\":\"" + custID + "\"," +
                 "\"firstName\":\"" + firstName + "\"," +
@@ -97,5 +125,75 @@ public class Customer implements JsonSerializable {
                 "\"zip\":\"" + zip + "\"," +
                 "\"country\":\"" + country + "\"" +
                 "}";
+    }
+
+
+    public void replaceFieldsFromJson(String json) {
+        try {
+            JSONParser parser = new JSONParser();
+            JSONObject jsonObject = (JSONObject) parser.parse(json);
+            replaceFieldsFromVault(jsonObject);
+        } catch (org.json.simple.parser.ParseException e) {
+            throw new IllegalArgumentException("Invalid JSON string", e);
+        }
+    }
+
+    @Override
+    public void replaceFieldsFromVault(JSONObject jsonObject) {
+        if (jsonObject.containsKey("customerid")) {
+            this.custID = (String) jsonObject.get("customerid");
+        }
+        if (jsonObject.containsKey("firstname")) {
+            this.firstName = (String) jsonObject.get("firstname");
+        }
+        if (jsonObject.containsKey("lastname")) {
+            this.lastName = (String) jsonObject.get("lastname");
+        }
+        if (jsonObject.containsKey("email")) {
+            this.email = (String) jsonObject.get("email");
+        }
+        if (jsonObject.containsKey("phonenumber")) {
+            this.phoneNumber = (String) jsonObject.get("phonenumber");
+        }
+        if (jsonObject.containsKey("dateofbirth")) {
+            this.dateOfBirth = (String) jsonObject.get("dateofbirth");
+        }
+        if (jsonObject.containsKey("addressline1")) {
+            this.addressLine1 = (String) jsonObject.get("addressline1");
+        }
+        if (jsonObject.containsKey("addressline2")) {
+            this.addressLine2 = (String) jsonObject.get("addressline2");
+        }
+        if (jsonObject.containsKey("addressline3")) {
+            this.addressLine3 = (String) jsonObject.get("addressline3");
+        }
+        if (jsonObject.containsKey("city")) {
+            this.city = (String) jsonObject.get("city");
+        }
+        if (jsonObject.containsKey("state")) {
+            this.state = (String) jsonObject.get("state");
+        }
+        if (jsonObject.containsKey("zip")) {
+            this.zip = (String) jsonObject.get("zip");
+        }
+        if (jsonObject.containsKey("country")) {
+            this.country = (String) jsonObject.get("country");
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public JSONObject jsonObjectForVault() {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("customerid", this.custID);
+        jsonObject.put("firstname", this.firstName);
+        jsonObject.put("lastname", this.lastName);
+        jsonObject.put("email", this.email);
+        jsonObject.put("phonenumber", this.phoneNumber);
+        jsonObject.put("dateofbirth", this.dateOfBirth);
+        jsonObject.put("addressline1", this.addressLine1);
+        jsonObject.put("addressline2", this.addressLine2);
+        jsonObject.put("addressline3", this.addressLine3);
+        return jsonObject;
     }
 }

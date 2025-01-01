@@ -45,9 +45,13 @@ public class GenSeedData {
         Faker faker = new Faker();
 
         // If required, initialize vault loader
-        VaultDataLoader loader = null;
+        VaultDataLoader<Customer> customer_loader = null;
+        VaultDataLoader<PaymentInfo> payments_loader = null;
         if (config.seed_data.load_to_vault) {
-            loader = new VaultDataLoader(config);
+            customer_loader = new VaultDataLoader<>(config.vault.vault_id, config.vault.vault_url, config.vault.max_rows_in_batch,
+                                                    new VaultDataLoader.TokenGiver(config), Customer.TABLE_NAME, null);
+            payments_loader = new VaultDataLoader<>(config.vault.vault_id, config.vault.vault_url, config.vault.max_rows_in_batch,
+                                                    new VaultDataLoader.TokenGiver(config), PaymentInfo.TABLE_NAME, null);
         }
 
         // Write headers
@@ -95,8 +99,8 @@ public class GenSeedData {
                 paymentWriter.writeNext(paymentData, true);
 
                 // Load data into the vault
-                if (loader!=null) {
-                    String payment_skyflow_id = loader.loadPaymentInfoIntoVault(paymentInfo);
+                if (payments_loader!=null) {
+                    String payment_skyflow_id = payments_loader.loadObjectIntoVault(paymentInfo);
                     String[] tokenizedPaymentData = {
                         payment_skyflow_id,
                         paymentInfo.paymentID, paymentInfo.custID, paymentInfo.creditCardNumber, paymentInfo.cardExpiry, paymentInfo.cardCVV,
@@ -111,8 +115,8 @@ public class GenSeedData {
             }
 
             // Load data into vault
-            if (loader!=null) {
-                String customer_skyflow_id = loader.loadCustomerIntoVault(customer);
+            if (customer_loader!=null) {
+                String customer_skyflow_id = customer_loader.loadObjectIntoVault(customer);
 
                 // Write Customer Data to CSV
                 String[] tokenizedCustomerData = {

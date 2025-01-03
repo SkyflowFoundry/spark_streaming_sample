@@ -8,21 +8,22 @@ import org.json.simple.parser.JSONParser;
 import com.github.javafaker.Address;
 import com.github.javafaker.Faker;
 import com.github.javafaker.Name;
+import com.skflow.iface.VaultObject;
+import com.skflow.iface.VaultColumn;
 
+@VaultObject("customeraccount")
 public class Customer implements JsonSerializable {
     static final String CUSTOMER_CSV_HEADER[] = new String[]{"CustID", "FirstName", "LastName", "Email", "PhoneNumber", "DateOfBirth", "AddressLine1", "AddressLine2", "AddressLine3", "City", "State", "Zip", "Country"};
-    public static final String TABLE_NAME = "customeraccount";
-    public static final String UPSERT_COLUMN = "customerid";
     
-    String custID;
-    String firstName;
-    String lastName;
-    String email;
-    String phoneNumber;
-    String dateOfBirth;
-    String addressLine1;
-    String addressLine2;
-    String addressLine3;
+    @VaultColumn(value="customerid",upsertColumn=true, tokenized=false) String custID;
+    @VaultColumn String firstName;
+    @VaultColumn String lastName;
+    @VaultColumn String email;
+    @VaultColumn String phoneNumber;
+    @VaultColumn String dateOfBirth;
+    @VaultColumn String addressLine1;
+    @VaultColumn String addressLine2;
+    @VaultColumn String addressLine3;
     String city;
     String state;
     String zip;
@@ -125,75 +126,5 @@ public class Customer implements JsonSerializable {
                 "\"zip\":\"" + zip + "\"," +
                 "\"country\":\"" + country + "\"" +
                 "}";
-    }
-
-
-    public void replaceFieldsFromJson(String json) {
-        try {
-            JSONParser parser = new JSONParser();
-            JSONObject jsonObject = (JSONObject) parser.parse(json);
-            replaceFieldsFromVault(jsonObject);
-        } catch (org.json.simple.parser.ParseException e) {
-            throw new IllegalArgumentException("Invalid JSON string", e);
-        }
-    }
-
-    @Override
-    public void replaceFieldsFromVault(JSONObject jsonObject) {
-        if (jsonObject.containsKey("customerid")) {
-            this.custID = (String) jsonObject.get("customerid");
-        }
-        if (jsonObject.containsKey("firstname")) {
-            this.firstName = (String) jsonObject.get("firstname");
-        }
-        if (jsonObject.containsKey("lastname")) {
-            this.lastName = (String) jsonObject.get("lastname");
-        }
-        if (jsonObject.containsKey("email")) {
-            this.email = (String) jsonObject.get("email");
-        }
-        if (jsonObject.containsKey("phonenumber")) {
-            this.phoneNumber = (String) jsonObject.get("phonenumber");
-        }
-        if (jsonObject.containsKey("dateofbirth")) {
-            this.dateOfBirth = (String) jsonObject.get("dateofbirth");
-        }
-        if (jsonObject.containsKey("addressline1")) {
-            this.addressLine1 = (String) jsonObject.get("addressline1");
-        }
-        if (jsonObject.containsKey("addressline2")) {
-            this.addressLine2 = (String) jsonObject.get("addressline2");
-        }
-        if (jsonObject.containsKey("addressline3")) {
-            this.addressLine3 = (String) jsonObject.get("addressline3");
-        }
-        if (jsonObject.containsKey("city")) {
-            this.city = (String) jsonObject.get("city");
-        }
-        if (jsonObject.containsKey("state")) {
-            this.state = (String) jsonObject.get("state");
-        }
-        if (jsonObject.containsKey("zip")) {
-            this.zip = (String) jsonObject.get("zip");
-        }
-        if (jsonObject.containsKey("country")) {
-            this.country = (String) jsonObject.get("country");
-        }
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public JSONObject jsonObjectForVault() {
-        JSONObject jsonObject = new JSONObject();
-        jsonObject.put("customerid", this.custID);
-        jsonObject.put("firstname", this.firstName);
-        jsonObject.put("lastname", this.lastName);
-        jsonObject.put("email", this.email);
-        jsonObject.put("phonenumber", this.phoneNumber);
-        jsonObject.put("dateofbirth", this.dateOfBirth);
-        jsonObject.put("addressline1", this.addressLine1);
-        jsonObject.put("addressline2", this.addressLine2);
-        jsonObject.put("addressline3", this.addressLine3);
-        return jsonObject;
     }
 }

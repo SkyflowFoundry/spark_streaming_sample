@@ -47,11 +47,12 @@ public class GenSeedData {
         // If required, initialize vault loader
         VaultDataLoader<Customer> customer_loader = null;
         VaultDataLoader<PaymentInfo> payments_loader = null;
+        TokenProvider tokenProvider = new TokenProvider(new String(Files.readAllBytes(Paths.get(config.vault.private_key_file))));
         if (config.seed_data.load_to_vault) {
             customer_loader = new VaultDataLoader<>(config.vault.vault_id, config.vault.vault_url, config.vault.max_rows_in_batch,
-                                                    new VaultDataLoader.TokenGiver(config), Customer.TABLE_NAME, null);
+                                                    tokenProvider, Customer.class);
             payments_loader = new VaultDataLoader<>(config.vault.vault_id, config.vault.vault_url, config.vault.max_rows_in_batch,
-                                                    new VaultDataLoader.TokenGiver(config), PaymentInfo.TABLE_NAME, null);
+                                                    tokenProvider, PaymentInfo.class);
         }
 
         // Write headers

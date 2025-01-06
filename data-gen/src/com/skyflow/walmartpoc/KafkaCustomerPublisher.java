@@ -14,12 +14,12 @@ import org.slf4j.LoggerFactory;
 import com.github.javafaker.Faker;
 
 
-public class KafkaPublisher<T extends JsonSerializable> implements AutoCloseable {
+public class KafkaCustomerPublisher<T extends JsonSerializable> implements AutoCloseable {
 
     final KafkaProducer<String, String> producer;
     final String topic;
 
-    KafkaPublisher(String brokerServer, String topic, Class<T> clazz) {
+    KafkaCustomerPublisher(String brokerServer, String topic, Class<T> clazz) {
         Properties props = new Properties();
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerServer);
         props.put(ProducerConfig.ACKS_CONFIG, "all");
@@ -62,9 +62,9 @@ public class KafkaPublisher<T extends JsonSerializable> implements AutoCloseable
         System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "yyyy-MM-dd HH:mm:ss");
         System.setProperty("org.slf4j.simpleLogger.logFile", "System.out");
         System.setProperty("org.slf4j.simpleLogger.log.org.slf4j.MDC", "instanceId");
-        Logger logger = LoggerFactory.getLogger(KafkaPublisher.class);
+        Logger logger = LoggerFactory.getLogger(KafkaCustomerPublisher.class);
 
-        try (KafkaPublisher<Customer> producer = new KafkaPublisher<>(brokerServer, topicName, Customer.class);) {
+        try (KafkaCustomerPublisher<Customer> producer = new KafkaCustomerPublisher<>(brokerServer, topicName, Customer.class);) {
             Customer customer = new Customer(new Faker());
 
             logger.info("sending message...");

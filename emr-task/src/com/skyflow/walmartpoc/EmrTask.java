@@ -150,7 +150,7 @@ public class EmrTask {
                 .format("kafka")
                 .option("kafka.bootstrap.servers", kafkaBootstrap)
                 .option("subscribe", kafkaTopic)
-                .option("startingOffsets", "earliest") // We want batching, for best performance
+                .option("startingOffsets", "latest")
                 .option("kafka.security.protocol", "SASL_SSL")
                 .option("kafka.sasl.mechanism", "AWS_MSK_IAM") // The following lines are for reading from AWS MSK via IAM; not valid for standalone Kafka
                 .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")

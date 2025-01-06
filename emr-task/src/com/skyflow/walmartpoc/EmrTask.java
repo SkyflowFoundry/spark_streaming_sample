@@ -86,7 +86,8 @@ public class EmrTask {
             System.exit(1);
         }
 
-        Class<?> clazz = Class.forName(args[0]);
+        @SuppressWarnings("unchecked")
+        Class<? extends JsonSerializable> clazz = (Class<? extends JsonSerializable>) Class.forName(args[0]);
         String outputBucket = args[1];
         String tableName = args[2];
         String kafkaBootstrap = args[3];
@@ -125,11 +126,11 @@ public class EmrTask {
 
         spark.sparkContext().setLogLevel("INFO");
 
-        // Generate schema for Customer using Java reflection
+        // Generate schema for given class using Java reflection
         List<StructField> fields = new ArrayList<>();
         fields.add(new StructField("skyflow_id", DataTypes.StringType, false, null));
-        Field[] customerFields = clazz.getDeclaredFields();
-        for (Field field : customerFields) {
+        Field[] classFields = clazz.getDeclaredFields();
+        for (Field field : classFields) {
             if (!Modifier.isStatic(field.getModifiers())) {
                 String fieldName = field.getName();
                 DataType dataType = DataTypes.StringType; // Not everything has to be strings!!!! XXX
@@ -230,20 +231,19 @@ public class EmrTask {
         query.awaitTermination();
     }
 
-    private static JSONObject getTokenizedObject(String json, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<?> clazz) throws Exception {
+    private static <T extends JsonSerializable> JSONObject getTokenizedObject(String json, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
         try {
             VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
-            VaultObjectInfo<?> objectInfo = cache.getVaultObjectInfo(clazz);
-            return _getTokenizedObject(json, vault_id, vault_url, credentialString, shortCircuitSkyflow, objectInfo);
+            VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
+            return _getTokenizedObject(json, vault_id, vault_url, credentialString, shortCircuitSkyflow, objectInfo, clazz);
         } catch (Exception e) {
             throw new Exception("Failed to process: " + json, e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
         }
     }
 
     @SuppressWarnings("unchecked")
-    private static JSONObject _getTokenizedObject(String json, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<?> objectInfo) throws Exception {
-        Customer c = new Customer(json);
-        VaultObjectInfo<Customer> customerObjectInfo = (VaultObjectInfo<Customer>) objectInfo;
+    private static <T extends JsonSerializable> JSONObject _getTokenizedObject(String json, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
+        T obj = clazz.getConstructor(String.class).newInstance(json);
     
         // Create a JSON/REST request to "vault_url" for inserting a record
         String insertRecordUrl = vault_url + "/v1/vaults/" + vault_id + "/" + objectInfo.tableName;
@@ -254,7 +254,7 @@ public class EmrTask {
         JSONObject record = new JSONObject();
         record.put("table", objectInfo.tableName);
 
-        JSONObject fields = ReflectionUtils.jsonObjectForVault(c, customerObjectInfo);
+        JSONObject fields = ReflectionUtils.jsonObjectForVault(obj, objectInfo);
 
         record.put("fields", fields);
         recordsArray.add(record);
@@ -302,14 +302,14 @@ public class EmrTask {
             JSONObject extractedFields = (JSONObject) firstRecord.get("tokens");
             skyflow_id = (String) firstRecord.get("skyflow_id");
 
-            ReflectionUtils.replaceWithValuesFromVault(c, extractedFields, customerObjectInfo);
+            ReflectionUtils.replaceWithValuesFromVault(obj, extractedFields, objectInfo);
         } else {
             skyflow_id = "skipped";
         }
     
-        String customerJson = c.toJSONString();
+        String objectJson = obj.toJSONString();
         JSONParser parser = new JSONParser();
-        JSONObject jsonObject = (JSONObject) parser.parse(customerJson);
+        JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
         jsonObject.put("skyflow_id", skyflow_id);
         return jsonObject;
     }

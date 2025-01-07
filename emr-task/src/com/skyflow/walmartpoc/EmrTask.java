@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -29,8 +30,8 @@ import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
-
-import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.TaskContext;
+import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.streaming.Trigger;
 import org.apache.spark.sql.streaming.StreamingQuery;
@@ -81,8 +82,8 @@ public class EmrTask {
     public static void main(String[] args) throws Exception {
         System.out.println("Version EMR 4");
 
-        if (args.length < 11) {
-            System.err.println("Usage: EmrTask <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <aws-region> <secret-name> <vault-id> <vault-url> <batch-size> <short-circuit-skyflow?>");
+        if (args.length < 12) {
+            System.err.println("Usage: EmrTask <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <aws-region> <secret-name> <vault-id> <vault-url> <batch-size> <batch-delay-secs> <short-circuit-skyflow?>");
             System.exit(1);
         }
 
@@ -97,7 +98,8 @@ public class EmrTask {
         String vault_id = args[7];
         String vault_url = args[8];
         int batchSize = Integer.parseInt(args[9]);
-        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[10]);
+        int microBatchSeconds = Integer.parseInt(args[10]);
+        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[11]);
         // For sanity checking, print out all the gathered args
         System.out.println("Class: " + clazz.getName());
         System.out.println("Output Bucket: " + outputBucket);
@@ -109,10 +111,24 @@ public class EmrTask {
         System.out.println("Vault ID: " + vault_id);
         System.out.println("Vault URL: " + vault_url);
         System.out.println("Batch Size: " + batchSize);
+        System.out.println("Batch delay secs: " + microBatchSeconds);
         System.out.println("Short Circuit Skyflow: " + shortCircuitSkyflow);
 
         // Retrieve Skyflow SA credential string from Secrets Manager
         String credentialString = getSecret(awsRegion, secretName);
+
+        // gather output options
+        String hudiTablePath = outputBucket + "/tables";
+        String hudiTableName = tableName;
+
+        // Configure Hudi Write
+        Map<String, String> hudiOptions = new HashMap<>();
+        hudiOptions.put("hoodie.table.name", hudiTableName);
+        hudiOptions.put("hoodie.datasource.write.recordkey.field", "custID"); // XXX not every object has custID, only Customer
+        hudiOptions.put("hoodie.datasource.write.precombine.field", "custID"); // XXX revisit this and other options
+        hudiOptions.put("hoodie.datasource.write.operation", "upsert");
+        hudiOptions.put("hoodie.datasource.hive_sync.enable", "false");
+        hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ");
 
         printDiagnosticInfoAndFailFast(awsRegion, kafkaBootstrap, outputBucket, vault_url, shortCircuitSkyflow);
 
@@ -151,6 +167,7 @@ public class EmrTask {
                 .option("kafka.bootstrap.servers", kafkaBootstrap)
                 .option("subscribe", kafkaTopic)
                 .option("startingOffsets", "latest")
+                .option("maxOffsetsPerTrigger", batchSize)
                 .option("kafka.security.protocol", "SASL_SSL")
                 .option("kafka.sasl.mechanism", "AWS_MSK_IAM") // The following lines are for reading from AWS MSK via IAM; not valid for standalone Kafka
                 .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")
@@ -177,43 +194,57 @@ public class EmrTask {
                                 .format("org.apache.spark.sql.execution.streaming.TextSocketSourceProvider")
                                 .option("host", "localhost")
                                 .option("port", 9999)
-                                .load();
+                                .option("maxOffsetsPerTrigger", batchSize)
+                                .load()
+                                .selectExpr("CAST(value AS STRING) as valueString");
         /* */
 
-        // Tokenize sensitive fields using Skyflow. Currently works one record at a time. XXX
-        @SuppressWarnings("unchecked")
-        MapFunction<Row, Row> mapFunction = row -> {
-            String json = row.getAs("valueString");
-            JSONObject jsonObject = getTokenizedObject(json, vault_id, vault_url, credentialString, shortCircuitSkyflow, clazz);
-            return RowFactory.create(new TreeMap<>(jsonObject).values().toArray(new String[0])); // Again, only works if all fields are strings. XXX
+        // Tokenize sensitive fields using Skyflow.
+
+        MapPartitionsFunction<Row,Row> transformer = new MapPartitionsFunction<Row,Row>() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public Iterator<Row> call(Iterator<Row> iterator) throws Exception {
+                int partitionId = TaskContext.getPartitionId();
+                System.out.println("Starting partition with ID: " + partitionId);
+                List<Row> result = new ArrayList<>();
+                while (iterator.hasNext()) {
+                    List<String> batch = new ArrayList<>();
+                    for (int i = 0; i < batchSize && iterator.hasNext(); i++) {
+                        batch.add(iterator.next().getString(0)); // There is only one column in the Row: valueString
+                    }
+                    // Process the batch
+                    JSONObject[] transformed = getTokenizedObjects(
+                        partitionId,
+                        batch.toArray(new String[0]),
+                        vault_id,
+                        vault_url,
+                        credentialString,
+                        shortCircuitSkyflow,
+                        clazz
+                    );
+                    for (JSONObject obj : transformed) {
+                        result.add(RowFactory.create(new TreeMap<>(obj).values().toArray(new String[0])));
+                    }
+                }
+                System.out.println("Processed " + result.size() + " items in partition with ID: " + partitionId);
+                return result.iterator();
+            }
         };
-        Dataset<Row> parsedDF = kafkaDF.map(mapFunction, Encoders.row(schema));
-        //parsedDF.printSchema();
-        
-        // Write to Hudi
-        String hudiTablePath = outputBucket + "/tables";
-        String hudiTableName = tableName;
 
-        // Configure Hudi Write
-        Map<String, String> hudiOptions = new HashMap<>();
-        hudiOptions.put("hoodie.table.name", hudiTableName);
-        hudiOptions.put("hoodie.datasource.write.recordkey.field", "custID"); 
-        hudiOptions.put("hoodie.datasource.write.precombine.field", "custID"); // XXX revisit this and other options
-        hudiOptions.put("hoodie.datasource.write.operation", "upsert");
-        hudiOptions.put("hoodie.datasource.hive_sync.enable", "false"); 
-        hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ");
+        Dataset<Row> transformedDF = kafkaDF.mapPartitions(transformer, Encoders.row(schema));
 
-        // For simplicity, let's do a continuous micro-batch every few seconds
-        StreamingQuery query = parsedDF
+        // Output
+
+        // Let's do a continuous micro-batch every few seconds
+        StreamingQuery query = transformedDF
                 .writeStream()
-                //.format("console").option("truncate",false).option("numRows",40)
-                .format("hudi")
-                .options(hudiOptions)
                 .option("checkpointLocation", outputBucket + "/checkpoints")
+                .trigger(Trigger.ProcessingTime(microBatchSeconds + " seconds"))
+                //.format("console").option("truncate",false).option("numRows",40)
+                .format("hudi").outputMode("append")
+                .options(hudiOptions)
                 .option("path", hudiTablePath)
-                .option("write.batch.size", "1")
-                .trigger(Trigger.ProcessingTime("10 seconds"))
-                .outputMode("append")
                 .start();
 
         // Wait for termination signal
@@ -231,38 +262,44 @@ public class EmrTask {
         query.awaitTermination();
     }
 
-    private static <T extends JsonSerializable> JSONObject getTokenizedObject(String json, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
+    private static <T extends JsonSerializable> JSONObject[] getTokenizedObjects(int partitionId, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
+        System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
         try {
             VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
             VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
-            return _getTokenizedObject(json, vault_id, vault_url, credentialString, shortCircuitSkyflow, objectInfo, clazz);
+            return _getTokenizedObjects(partitionId, jsons, vault_id, vault_url, credentialString, shortCircuitSkyflow, objectInfo, clazz);
         } catch (Exception e) {
-            throw new Exception("Failed to process: " + json, e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
+            throw new Exception("NOT-FOR-PRODUCTION: Failed to process: " + String.join(", ", jsons), e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
         }
     }
 
     @SuppressWarnings("unchecked")
-    private static <T extends JsonSerializable> JSONObject _getTokenizedObject(String json, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
-        T obj = clazz.getConstructor(String.class).newInstance(json);
-    
-        // Create a JSON/REST request to "vault_url" for inserting a record
-        String insertRecordUrl = vault_url + "/v1/vaults/" + vault_id + "/" + objectInfo.tableName;
-        // construct insert input
-        JSONObject insertReqBody = new JSONObject();
+    private static <T extends JsonSerializable> JSONObject[] _getTokenizedObjects(int partitionId, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
+        JSONObject[] resultList = new JSONObject[jsons.length];
+        T[] objArray = (T[]) new JsonSerializable[jsons.length];
         JSONArray recordsArray = new JSONArray();
 
-        JSONObject record = new JSONObject();
-        record.put("table", objectInfo.tableName);
+        int i;
+        i=0;
+        for (String json : jsons) {
+            //System.out.println(" ("+ partitionId + ") recv: " + json);
+            T obj = clazz.getConstructor(String.class).newInstance(json);
+            objArray[i] = obj;
+            JSONObject record = new JSONObject();
+            record.put("table", objectInfo.tableName);
 
-        JSONObject fields = ReflectionUtils.jsonObjectForVault(obj, objectInfo);
+            JSONObject fields = ReflectionUtils.jsonObjectForVault(obj, objectInfo);
+            record.put("fields", fields);
+            recordsArray.add(record);
+            i = i + 1;
+        }
 
-        record.put("fields", fields);
-        recordsArray.add(record);
+        // Create a JSON/REST request to "vault_url" for inserting records
+        String insertRecordUrl = vault_url + "/v1/vaults/" + vault_id + "/" + objectInfo.tableName;
+        JSONObject insertReqBody = new JSONObject();
         insertReqBody.put("records", recordsArray);
-        insertReqBody.put("tokenization",true);
-        insertReqBody.put("upsert",objectInfo.upsertColumnName);
-
-        // On errors, close resources! XXX
+        insertReqBody.put("tokenization", true);
+        insertReqBody.put("upsert", objectInfo.upsertColumnName);
 
         // Create an HTTP client
         CloseableHttpClient client = HttpClientBuilder.create().build();
@@ -271,15 +308,14 @@ public class EmrTask {
         ClassicHttpRequest request = ClassicRequestBuilder
             .post(URI.create(insertRecordUrl))
             .addHeader("Authorization", "Bearer " + credentialString)
-            .setEntity(insertReqBody.toJSONString(),ContentType.APPLICATION_JSON)
+            .setEntity(insertReqBody.toJSONString(), ContentType.APPLICATION_JSON)
             .build();
 
-        final String skyflow_id;
         if (!shortCircuitSkyflow) {
             // Send the request and get the response
             @SuppressWarnings("deprecation") // We NEED the synch call
             CloseableHttpResponse response = client.execute(request);
-            if (response.getCode()!=200) {
+            if (response.getCode() != 200) {
                 String statusLine = response.getReasonPhrase();
                 response.close();
                 client.close();
@@ -296,22 +332,39 @@ public class EmrTask {
             client.close();
 
             JSONObject insertResponse = (JSONObject) jsonParser.parse(bodyString);
-
             JSONArray responseRecords = (JSONArray) insertResponse.get("records");
-            JSONObject firstRecord = (JSONObject) ((JSONArray) responseRecords).get(0);
-            JSONObject extractedFields = (JSONObject) firstRecord.get("tokens");
-            skyflow_id = (String) firstRecord.get("skyflow_id");
 
-            ReflectionUtils.replaceWithValuesFromVault(obj, extractedFields, objectInfo);
+            if (responseRecords.size() != jsons.length) {
+                throw new RuntimeException("Skyflow was asked to upsert " + jsons.length + " records and returned " + responseRecords.size() + " results");
+            }
+            for (i = 0; i < responseRecords.size(); i++) {
+                JSONObject responseRecord = (JSONObject) responseRecords.get(i);
+                JSONObject extractedFields = (JSONObject) responseRecord.get("tokens");
+                String skyflow_id = (String) responseRecord.get("skyflow_id");
+
+                T obj = objArray[i];
+                ReflectionUtils.replaceWithValuesFromVault(obj, extractedFields, objectInfo);
+
+                String objectJson = obj.toJSONString();
+                JSONParser parser = new JSONParser();
+                JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
+                jsonObject.put("skyflow_id", skyflow_id);
+                resultList[i] = jsonObject;
+            }
         } else {
-            skyflow_id = "skipped";
+            i = 0;
+            for (T obj : objArray) {
+                //System.out.println(" ("+ partitionId + ") sim send: " + obj);
+                String objectJson = obj.toJSONString();
+                JSONParser parser = new JSONParser();
+                JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
+                jsonObject.put("skyflow_id", "skipped");
+                resultList[i] =jsonObject;
+                i = i + 1;
+            }
         }
-    
-        String objectJson = obj.toJSONString();
-        JSONParser parser = new JSONParser();
-        JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
-        jsonObject.put("skyflow_id", skyflow_id);
-        return jsonObject;
+
+        return resultList;
     }
 
     private static String getSecret(String region, String secretName) {

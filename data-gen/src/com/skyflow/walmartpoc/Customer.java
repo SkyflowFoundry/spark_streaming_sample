@@ -12,6 +12,7 @@ import com.skflow.iface.VaultObject;
 import com.skflow.iface.VaultColumn;
 
 @VaultObject("customeraccount")
+@HudiConfig(recordkey_field="custID",precombinekey_field="created_ts")
 public class Customer implements JsonSerializable {
     static final String CUSTOMER_CSV_HEADER[] = new String[]{"CustID", "FirstName", "LastName", "Email", "PhoneNumber", "DateOfBirth", "AddressLine1", "AddressLine2", "AddressLine3", "City", "State", "Zip", "Country"};
     
@@ -28,6 +29,7 @@ public class Customer implements JsonSerializable {
     String state;
     String zip;
     String country;
+    Long created_ts;
 
     Customer(Faker faker) {
         this.custID = UUID.randomUUID().toString();
@@ -46,6 +48,8 @@ public class Customer implements JsonSerializable {
         this.state = address.state();
         this.zip = address.zipCode();
         this.country = address.country();
+
+        this.created_ts = System.currentTimeMillis();
     }
 
     Customer(String[] csvRecord) {
@@ -85,6 +89,7 @@ public class Customer implements JsonSerializable {
             this.state = (String) jsonObject.get("state");
             this.zip = (String) jsonObject.get("zip");
             this.country = (String) jsonObject.get("country");
+            this.created_ts = (Long) jsonObject.get("created_ts");
         } catch (org.json.simple.parser.ParseException e) {
             throw new IllegalArgumentException("Invalid JSON string", e);
         }
@@ -106,6 +111,7 @@ public class Customer implements JsonSerializable {
                 ", state='" + state + '\'' +
                 ", zip='" + zip + '\'' +
                 ", country='" + country + '\'' +
+                ", created_ts=" + created_ts +
                 '}';
     }
 
@@ -125,6 +131,7 @@ public class Customer implements JsonSerializable {
                 "\"state\":\"" + state + "\"," +
                 "\"zip\":\"" + zip + "\"," +
                 "\"country\":\"" + country + "\"" +
+                "\"created_ts\":" + created_ts + "" +
                 "}";
     }
 }

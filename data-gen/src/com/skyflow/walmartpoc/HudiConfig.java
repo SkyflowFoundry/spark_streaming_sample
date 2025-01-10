@@ -1,0 +1,12 @@
+package com.skyflow.walmartpoc;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
+@Retention(RetentionPolicy.RUNTIME)
+public @interface HudiConfig {
+
+    String recordkey_field();
+    String precombinekey_field();
+
+}

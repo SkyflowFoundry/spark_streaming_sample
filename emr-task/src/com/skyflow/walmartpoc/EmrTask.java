@@ -130,7 +130,7 @@ public class EmrTask {
         hudiOptions.put("hoodie.datasource.hive_sync.enable", "false");
         hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ");
 
-        printDiagnosticInfoAndFailFast(awsRegion, kafkaBootstrap, outputBucket, vault_url, shortCircuitSkyflow);
+        //printDiagnosticInfoAndFailFast(awsRegion, kafkaBootstrap, outputBucket, vault_url, shortCircuitSkyflow);
 
         // Setup Spark
         SparkSession spark = SparkSession.builder()
@@ -149,7 +149,20 @@ public class EmrTask {
         for (Field field : classFields) {
             if (!Modifier.isStatic(field.getModifiers())) {
                 String fieldName = field.getName();
-                DataType dataType = DataTypes.StringType; // Not everything has to be strings!!!! XXX
+                DataType dataType;
+                if (field.getType().equals(int.class) || field.getType().equals(Integer.class)) {
+                    dataType = DataTypes.IntegerType;
+                } else if (field.getType().equals(long.class) || field.getType().equals(Long.class)) {
+                    dataType = DataTypes.LongType;
+                } else if (field.getType().equals(double.class) || field.getType().equals(Double.class)) {
+                    dataType = DataTypes.DoubleType;
+                } else if (field.getType().equals(float.class) || field.getType().equals(Float.class)) {
+                    dataType = DataTypes.FloatType;
+                } else if (field.getType().equals(boolean.class) || field.getType().equals(Boolean.class)) {
+                    dataType = DataTypes.BooleanType;
+                } else {
+                    dataType = DataTypes.StringType; // catch-all!
+                }
                 fields.add(DataTypes.createStructField(fieldName, dataType, true));
             }
         }
@@ -159,7 +172,7 @@ public class EmrTask {
         // System.out.println(schema);
 
         // Get the input stream
-        /* */
+        /* *
         // For real-use: Read from Kafka
         Dataset<Row> kafkaDF = spark
                 .readStream()
@@ -187,7 +200,7 @@ public class EmrTask {
                                             .toDF("valueString").withColumn("key", functions.lit(""));
         //kafkaDF.foreach((ForeachFunction<Row>) row -> System.out.println(row.schema() + "  " + row.length() + " " + row.prettyJson()));System.exit(0);
         /* */
-        /* *
+        /* */
         // For testing with streaming: read from socket
         Dataset<Row> kafkaDF = spark
                                 .readStream()
@@ -224,7 +237,7 @@ public class EmrTask {
                         clazz
                     );
                     for (JSONObject obj : transformed) {
-                        result.add(RowFactory.create(new TreeMap<>(obj).values().toArray(new String[0])));
+                        result.add(RowFactory.create(new TreeMap<>(obj).values().toArray()));
                     }
                 }
                 System.out.println("Processed " + result.size() + " items in partition with ID: " + partitionId);
@@ -241,8 +254,8 @@ public class EmrTask {
                 .writeStream()
                 .option("checkpointLocation", outputBucket + "/checkpoints")
                 .trigger(Trigger.ProcessingTime(microBatchSeconds + " seconds"))
-                //.format("console").option("truncate",false).option("numRows",40)
-                .format("hudi").outputMode("append")
+                .format("console").option("truncate",false).option("numRows",40)
+                //.format("hudi").outputMode("append")
                 .options(hudiOptions)
                 .option("path", hudiTablePath)
                 .start();

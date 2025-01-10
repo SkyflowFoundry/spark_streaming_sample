@@ -124,11 +124,13 @@ public class EmrTask {
         // Configure Hudi Write
         Map<String, String> hudiOptions = new HashMap<>();
         hudiOptions.put("hoodie.table.name", hudiTableName);
-        hudiOptions.put("hoodie.datasource.write.recordkey.field", "custID"); // XXX not every object has custID, only Customer
-        hudiOptions.put("hoodie.datasource.write.precombine.field", "custID"); // XXX revisit this and other options
         hudiOptions.put("hoodie.datasource.write.operation", "upsert");
         hudiOptions.put("hoodie.datasource.hive_sync.enable", "false");
         hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ");
+
+        HudiConfig hudiConfigAnn = clazz.getAnnotation(HudiConfig.class);
+        hudiOptions.put("hoodie.datasource.write.recordkey.field", hudiConfigAnn.recordkey_field());
+        hudiOptions.put("hoodie.datasource.write.precombine.field", hudiConfigAnn.precombinekey_field());
 
         //printDiagnosticInfoAndFailFast(awsRegion, kafkaBootstrap, outputBucket, vault_url, shortCircuitSkyflow);
 

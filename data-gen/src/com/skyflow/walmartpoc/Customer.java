@@ -69,6 +69,9 @@ public class Customer implements JsonSerializable {
         this.state = csvRecord[10];
         this.zip = csvRecord[11];
         this.country = csvRecord[12];
+
+        // We don't read lastupdate_ts ourselves. If we do write this object
+        // somewhere, like a Kafka stream, we are suppoed to update lastupdate_ts
     }
 
     public Customer(String jsonString) {

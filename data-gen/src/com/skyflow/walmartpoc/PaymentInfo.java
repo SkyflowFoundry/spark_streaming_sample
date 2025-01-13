@@ -11,6 +11,7 @@ import com.skflow.iface.VaultColumn;
 import com.skflow.iface.VaultObject;
 
 @VaultObject("customerpaymentdetails")
+@HudiConfig(recordkey_field="paymentID",precombinekey_field="lastupdate_ts")
 public class PaymentInfo implements JsonSerializable {
     static final String PAYMENT_CSV_HEADER[] = new String[]{"PaymentID", "CustID", "CreditCardNumber", "CardExpiry", "CardCVV", "CardHolderFirstName", "CardHolderLastName", "CardHolderPhoneNumber", "CardHolderAddressLine1", "CardHolderAddressLine2", "CardHolderAddressLine3", "CardHolderCity", "CardHolderState", "CardHolderZip", "CardHolderCountry", "CardHolderEmail", "CardHolderDateOfBirth"};
 
@@ -31,6 +32,8 @@ public class PaymentInfo implements JsonSerializable {
     String cardHolderCountry;
     @VaultColumn String cardHolderEmail;
     @VaultColumn String cardHolderDateOfBirth;
+    Long lastupdate_ts;
+
 
     PaymentInfo(Customer customer, Faker faker) {
         this.paymentID = UUID.randomUUID().toString();
@@ -52,6 +55,8 @@ public class PaymentInfo implements JsonSerializable {
         this.cardHolderCountry = customer.country;
         this.cardHolderEmail = customer.email;
         this.cardHolderDateOfBirth = customer.dateOfBirth;
+
+        this.lastupdate_ts = System.currentTimeMillis();
     }
 
     PaymentInfo(String[] csvRecord) {
@@ -75,6 +80,9 @@ public class PaymentInfo implements JsonSerializable {
         this.cardHolderCountry = csvRecord[14];
         this.cardHolderEmail = csvRecord[15];
         this.cardHolderDateOfBirth = csvRecord[16];
+
+        // We don't read lastupdate_ts ourselves. If we do write this object
+        // somewhere, like a Kafka stream, we are suppoed to update lastupdate_ts
     }
 
     public PaymentInfo(String jsonString) {
@@ -99,6 +107,7 @@ public class PaymentInfo implements JsonSerializable {
             this.cardHolderCountry = (String) jsonObject.get("cardHolderCountry");
             this.cardHolderEmail = (String) jsonObject.get("cardHolderEmail");
             this.cardHolderDateOfBirth = (String) jsonObject.get("cardHolderDateOfBirth");
+            this.lastupdate_ts = (Long) jsonObject.get("lastupdate_ts");
         } catch (org.json.simple.parser.ParseException e) {
             throw new IllegalArgumentException("Invalid JSON string", e);
         }
@@ -124,6 +133,7 @@ public class PaymentInfo implements JsonSerializable {
                 ", cardHolderCountry='" + cardHolderCountry + '\'' +
                 ", cardHolderEmail='" + cardHolderEmail + '\'' +
                 ", cardHolderDateOfBirth='" + cardHolderDateOfBirth + '\'' +
+                ", lastupdate_ts=" + lastupdate_ts +
                 '}';
     }
 
@@ -147,6 +157,7 @@ public class PaymentInfo implements JsonSerializable {
                 "\"cardHolderCountry\":\"" + cardHolderCountry + "\"," +
                 "\"cardHolderEmail\":\"" + cardHolderEmail + "\"," +
                 "\"cardHolderDateOfBirth\":\"" + cardHolderDateOfBirth + "\"" +
+                "\"lastupdate_ts\":" + lastupdate_ts + "" +
                 "}";
         }
 }

@@ -130,6 +130,7 @@ public class EmrTask {
         hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ");
 
         HudiConfig hudiConfigAnn = clazz.getAnnotation(HudiConfig.class);
+        //hudiOptions.put("hoodie.datasource.write.partitionpath.field", hudiConfigAnn.partitionpathkey_field());
         hudiOptions.put("hoodie.datasource.write.recordkey.field", hudiConfigAnn.recordkey_field());
         hudiOptions.put("hoodie.datasource.write.precombine.field", hudiConfigAnn.precombinekey_field());
 

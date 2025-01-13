@@ -8,5 +8,6 @@ public @interface HudiConfig {
 
     String recordkey_field();
     String precombinekey_field();
+    String partitionpathkey_field() default "";
 
 }

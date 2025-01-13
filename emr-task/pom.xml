@@ -18,7 +18,7 @@
     <awsjavasdk.version>2.29.34</awsjavasdk.version>
     <slf4j.version>2.0.15</slf4j.version>
     <jwt.version>0.12.6</jwt.version>
-    <spark.libraries.scope>provided</spark.libraries.scope> <!-- helps when testing locally. set to "provided" for use in EMR, "compile" for testing -->
+    <spark.libraries.scope>provided</spark.libraries.scope> 
     <!-- Adjust as needed -->
   </properties>
 
@@ -160,6 +160,11 @@
         </exclusions>
     </dependency>
 
+    <!-- For metrics collection -->
+    <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>cloudwatch</artifactId>
+    </dependency>
 <!--
     <dependency>
         <groupId>org.slf4j</groupId>

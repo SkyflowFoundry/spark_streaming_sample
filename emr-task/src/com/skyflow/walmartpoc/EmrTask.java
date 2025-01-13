@@ -45,6 +45,7 @@ import org.json.simple.JSONArray;
 
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.cloudwatch.model.StandardUnit;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
@@ -137,7 +138,7 @@ public class EmrTask {
         // Setup Spark
         SparkSession spark = SparkSession.builder()
                 .appName("MSK to Hudi Job")
-                //.master("local[*]").config("spark.local.dir", "/tmp/spark-temp") //  Uncomment to run Spark locally with all available cores
+                //.master("local[1]").config("spark.local.dir", "/tmp/spark-temp") //  Uncomment to run Spark locally
                 .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
                 .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") // Maybe s3:// would perform better? XXX
                 .getOrCreate();
@@ -174,7 +175,7 @@ public class EmrTask {
         // System.out.println(schema);
 
         // Get the input stream
-        /* *
+        /* */
         // For real-use: Read from Kafka
         Dataset<Row> kafkaDF = spark
                 .readStream()
@@ -202,7 +203,7 @@ public class EmrTask {
                                             .toDF("valueString").withColumn("key", functions.lit(""));
         //kafkaDF.foreach((ForeachFunction<Row>) row -> System.out.println(row.schema() + "  " + row.length() + " " + row.prettyJson()));System.exit(0);
         /* */
-        /* */
+        /* *
         // For testing with streaming: read from socket
         Dataset<Row> kafkaDF = spark
                                 .readStream()
@@ -222,28 +223,46 @@ public class EmrTask {
             public Iterator<Row> call(Iterator<Row> iterator) throws Exception {
                 int partitionId = TaskContext.getPartitionId();
                 System.out.println("Starting partition with ID: " + partitionId);
-                List<Row> result = new ArrayList<>();
-                while (iterator.hasNext()) {
-                    List<String> batch = new ArrayList<>();
-                    for (int i = 0; i < batchSize && iterator.hasNext(); i++) {
-                        batch.add(iterator.next().getString(0)); // There is only one column in the Row: valueString
+                try (final CollectorAndReporter stats = new CollectorAndReporter(kafkaTopic, 10000)) {
+                    Map<String, String> dimensionMap = new HashMap<>();
+                    dimensionMap.put("object", clazz.getSimpleName());
+                    ValueDatum numRecords = stats.createOrGetUniqueMetricForName("numRecords", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+                    ValueDatum numBatches = stats.createOrGetUniqueMetricForName("numBatches", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+                    StatisticDatum batchSizes = stats.createOrGetUniqueMetricForName("batchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
+                    StatisticDatum apiLatency = stats.createOrGetUniqueMetricForName("apiLatency", dimensionMap, StandardUnit.MILLISECONDS, StatisticDatum.class);
+
+                    List<Row> result = new ArrayList<>();
+                    while (iterator.hasNext()) {
+                        List<String> batch = new ArrayList<>();
+                        for (int i = 0; i < batchSize && iterator.hasNext(); i++) {
+                            numRecords.increment();
+                            //numRecords.increment();
+                            batch.add(iterator.next().getString(0)); // There is only one column in the Row: valueString
+                        }
+                        if (!batch.isEmpty()) {
+                            numBatches.increment();
+                            batchSizes.value(batch.size());
+
+                            // Process the batch
+                            JSONObject[] transformed = getTokenizedObjects(
+                                partitionId,
+                                apiLatency,
+                                batch.toArray(new String[0]),
+                                vault_id,
+                                vault_url,
+                                credentialString,
+                                shortCircuitSkyflow,
+                                clazz
+                            );
+                            for (JSONObject obj : transformed) {
+                                result.add(RowFactory.create(new TreeMap<>(obj).values().toArray()));
+                            }
+                        }
+                        stats.pollAndReport(false);
                     }
-                    // Process the batch
-                    JSONObject[] transformed = getTokenizedObjects(
-                        partitionId,
-                        batch.toArray(new String[0]),
-                        vault_id,
-                        vault_url,
-                        credentialString,
-                        shortCircuitSkyflow,
-                        clazz
-                    );
-                    for (JSONObject obj : transformed) {
-                        result.add(RowFactory.create(new TreeMap<>(obj).values().toArray()));
-                    }
+                    System.out.println("Processed " + result.size() + " items in partition with ID: " + partitionId);
+                    return result.iterator();
                 }
-                System.out.println("Processed " + result.size() + " items in partition with ID: " + partitionId);
-                return result.iterator();
             }
         };
 
@@ -256,8 +275,8 @@ public class EmrTask {
                 .writeStream()
                 .option("checkpointLocation", outputBucket + "/checkpoints")
                 .trigger(Trigger.ProcessingTime(microBatchSeconds + " seconds"))
-                .format("console").option("truncate",false).option("numRows",40)
-                //.format("hudi").outputMode("append")
+                //.format("console").option("truncate",false).option("numRows",40)
+                .format("hudi").outputMode("append")
                 .options(hudiOptions)
                 .option("path", hudiTablePath)
                 .start();
@@ -277,19 +296,19 @@ public class EmrTask {
         query.awaitTermination();
     }
 
-    private static <T extends JsonSerializable> JSONObject[] getTokenizedObjects(int partitionId, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
+    private static <T extends JsonSerializable> JSONObject[] getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
         System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
         try {
             VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
             VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
-            return _getTokenizedObjects(partitionId, jsons, vault_id, vault_url, credentialString, shortCircuitSkyflow, objectInfo, clazz);
+            return _getTokenizedObjects(partitionId, apiLatency, jsons, vault_id, vault_url, credentialString, shortCircuitSkyflow, objectInfo, clazz);
         } catch (Exception e) {
             throw new Exception("NOT-FOR-PRODUCTION: Failed to process: " + String.join(", ", jsons), e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
         }
     }
 
     @SuppressWarnings("unchecked")
-    private static <T extends JsonSerializable> JSONObject[] _getTokenizedObjects(int partitionId, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
+    private static <T extends JsonSerializable> JSONObject[] _getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
         JSONObject[] resultList = new JSONObject[jsons.length];
         T[] objArray = (T[]) new JsonSerializable[jsons.length];
         JSONArray recordsArray = new JSONArray();
@@ -327,9 +346,10 @@ public class EmrTask {
             .build();
 
         if (!shortCircuitSkyflow) {
+            long startTime = System.currentTimeMillis();
             // Send the request and get the response
             @SuppressWarnings("deprecation") // We NEED the synch call
-            CloseableHttpResponse response = client.execute(request);
+            final CloseableHttpResponse response = client.execute(request);
             if (response.getCode() != 200) {
                 String statusLine = response.getReasonPhrase();
                 response.close();
@@ -342,9 +362,11 @@ public class EmrTask {
             String bodyString = null;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()))) {
                 bodyString = reader.lines().collect(Collectors.joining("\n"));
+            } finally {
+                apiLatency.value(System.currentTimeMillis() - startTime);
+                response.close();
+                client.close();
             }
-            response.close();
-            client.close();
 
             JSONObject insertResponse = (JSONObject) jsonParser.parse(bodyString);
             JSONArray responseRecords = (JSONArray) insertResponse.get("records");
@@ -396,7 +418,8 @@ public class EmrTask {
         return getSecretValueResponse.secretString();
     }
 
-    private static void printDiagnosticInfoAndFailFast(String awsRegion, String kafkaBootstrap, String outputBucket, String vault_url, boolean shortCircuitSkyflow) throws Exception {
+    @SuppressWarnings("unused")
+	private static void printDiagnosticInfoAndFailFast(String awsRegion, String kafkaBootstrap, String outputBucket, String vault_url, boolean shortCircuitSkyflow) throws Exception {
         System.out.println("Current Network settings:"); // Helps make sense of stuff below
         Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
         while (networkInterfaces.hasMoreElements()) {

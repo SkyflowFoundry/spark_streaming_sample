@@ -4,12 +4,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.skyflow.walmartpoc</groupId>
-    <artifactId>SyntheticDataGenerator</artifactId>
+    <artifactId>DataModel</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>SyntheticDataGenerator</name>
-    <description>A command line application for generating synthetic data</description>
+    <name>DataModel</name>
+    <description>The Data Model for the Walmart project</description>
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
@@ -40,16 +40,6 @@
             <version>1.1.1</version>
         </dependency>
         <dependency>
-            <groupId>com.skyflow</groupId>
-            <artifactId>skyflow-java</artifactId>
-            <version>1.15.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.kafka</groupId>
-            <artifactId>kafka-clients</artifactId>
-            <version>3.6.0</version>
-        </dependency>
-        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
@@ -58,17 +48,6 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
             <version>${slf4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.skyflow.walmartpoc</groupId>
-            <artifactId>DataModel</artifactId>
-            <version>1.0-SNAPSHOT</version>
-            <exclusions>
-                <exclusion>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-simple</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
     </dependencies>
 

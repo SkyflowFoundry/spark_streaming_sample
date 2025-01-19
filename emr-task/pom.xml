@@ -204,7 +204,7 @@
 
     <dependency>
       <groupId>com.skyflow.walmartpoc</groupId>
-      <artifactId>SyntheticDataGenerator</artifactId>
+      <artifactId>DataModel</artifactId>
       <version>1.0-SNAPSHOT</version>
       <exclusions>
         <exclusion>

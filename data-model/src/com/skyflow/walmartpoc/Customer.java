@@ -1,5 +1,7 @@
 package com.skyflow.walmartpoc;
 
+import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 
 import org.json.simple.JSONObject;
@@ -31,7 +33,7 @@ public class Customer implements JsonSerializable {
     String country;
     Long lastupdate_ts;
 
-    Customer(Faker faker) {
+    Customer(Faker faker, List<CountryZipCityState> addressHelper) {
         this.custID = UUID.randomUUID().toString();
         Name name = faker.name();
         this.firstName = name.firstName();
@@ -40,14 +42,16 @@ public class Customer implements JsonSerializable {
         this.phoneNumber = faker.phoneNumber().phoneNumber();
         this.dateOfBirth = new java.text.SimpleDateFormat("yyyy-MM-dd").format(faker.date().birthday(18, 80)); // Random age between 18 and 80
 
+        Random rng = new Random();
+        CountryZipCityState czcs = addressHelper.get(rng.nextInt(addressHelper.size()));
         Address address = faker.address();
         this.addressLine1 = address.streetAddress();
-        this.addressLine2 = ""; // Optional
+        this.addressLine2 = address.secondaryAddress();
         this.addressLine3 = ""; // Optional
-        this.city = address.city();
-        this.state = address.state();
-        this.zip = address.zipCode();
-        this.country = address.country();
+        this.city = czcs.city;
+        this.state = czcs.state;
+        this.zip = czcs.zip;
+        this.country = czcs.country;
 
         this.lastupdate_ts = System.currentTimeMillis();
     }

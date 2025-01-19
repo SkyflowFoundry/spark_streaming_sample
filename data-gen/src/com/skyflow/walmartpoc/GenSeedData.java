@@ -3,6 +3,7 @@ package com.skyflow.walmartpoc;
 import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Random;
 
 import com.github.javafaker.Faker;
@@ -62,10 +63,12 @@ public class GenSeedData {
         tokenizedPaymentWriter.writeNext(new String[]{"skyflow_id","PaymentID", "CustID", "CreditCardNumber", "CardExpiry", "CardCVV", "CardHolderFirstName", "CardHolderLastName", "CardHolderPhoneNumber", "CardHolderAddressLine1", "CardHolderAddressLine2", "CardHolderAddressLine3", "CardHolderCity", "CardHolderState", "CardHolderZip", "CardHolderCountry", "CardHolderEmail", "CardHolderDateOfBirth"});
 
         Random random = new Random();
+        // Initialize Faker & supporting stuff
+        List<CountryZipCityState> czcs = CountryZipCityState.loadData("US.tsv");
 
         for (int i = 0; i < customerCount; i++) {
             // Generate Customer Data
-            Customer customer = new Customer(faker);
+            Customer customer = new Customer(faker, czcs);
 
             // Write Customer Data to CSV
             String[] customerData = {

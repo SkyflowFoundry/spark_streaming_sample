@@ -19,6 +19,7 @@ public class UpsertGenerator {
     private final ArrayList<Customer> seeded_customers;
     private final ArrayList<PaymentInfo> seeded_payments;
     private final Faker faker = new Faker();
+    private final List<CountryZipCityState> czcs = CountryZipCityState.loadData("US.tsv");
     private final Random random = new Random();
     private final Map<String, List<PaymentInfo>> custIDToPaymentsMap;
 
@@ -65,7 +66,7 @@ public class UpsertGenerator {
         float r = random.nextFloat();
         if (r < insert_customer_probability) {
             // Generate a new Customer using Faker
-            customer = new Customer(faker);
+            customer = new Customer(faker,czcs);
             custIDToPaymentsMap.put(customer.custID, new LinkedList<>());
 
 

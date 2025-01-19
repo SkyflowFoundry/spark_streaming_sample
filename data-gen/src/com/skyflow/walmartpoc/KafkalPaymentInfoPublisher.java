@@ -1,6 +1,7 @@
 package com.skyflow.walmartpoc;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.kafka.clients.producer.Callback;
@@ -64,9 +65,12 @@ public class KafkalPaymentInfoPublisher<T extends JsonSerializable> implements A
         System.setProperty("org.slf4j.simpleLogger.log.org.slf4j.MDC", "instanceId");
         Logger logger = LoggerFactory.getLogger(KafkalPaymentInfoPublisher.class);
 
+        // Initialize Faker & supporting stuff
+        List<CountryZipCityState> czcs = CountryZipCityState.loadData("US.tsv");
         Faker faker = new Faker();
+
         try (KafkalPaymentInfoPublisher<PaymentInfo> producer = new KafkalPaymentInfoPublisher<>(brokerServer, topicName, PaymentInfo.class);) {
-            PaymentInfo paymentInfo = new PaymentInfo(new Customer(faker), faker);
+            PaymentInfo paymentInfo = new PaymentInfo(new Customer(faker, czcs), faker);
 
             logger.info("sending message...");
             producer.send(paymentInfo, (metadata, exception) -> {

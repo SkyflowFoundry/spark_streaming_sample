@@ -7,9 +7,10 @@ import com.skyflow.entities.InsertOptions;
 import com.skyflow.entities.SkyflowConfiguration;
 import com.skyflow.entities.TokenProvider;
 import com.skyflow.entities.UpsertOption;
+import com.skyflow.vault.Skyflow;
+
 import com.skyflow.utils.ReflectionUtils;
 import com.skyflow.utils.ReflectionUtils.VaultObjectInfo;
-import com.skyflow.vault.Skyflow;
 
 
 public class VaultDataLoader<T> {

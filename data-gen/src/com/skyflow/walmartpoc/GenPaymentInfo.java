@@ -5,10 +5,10 @@ import java.util.List;
 
 import com.github.javafaker.Faker;
 
-public class GenCustomer {
+public class GenPaymentInfo {
     public static void main(String[] args) throws IOException {
         if (args.length != 1) {
-            System.out.println("Please provide the number of customers to generate as an argument.");
+            System.out.println("Please provide the number of payment info objects to generate as an argument.");
             return;
         }
 
@@ -16,20 +16,20 @@ public class GenCustomer {
         try {
             n = Integer.parseInt(args[0]);
         } catch (NumberFormatException e) {
-            System.out.println("Invalid number format for the number of customers. Please provide an integer.");
+            System.out.println("Invalid number format for the number of payment infos. Please provide an integer.");
             return;
         }
 
         // Initialize Faker & supporting stuff
         List<CountryZipCityState> czcs = CountryZipCityState.loadData("US.tsv");
         Faker faker = new Faker();
-
+        Customer customer = new Customer(faker, czcs);
         for (int i = 0; i < n; i++) {
-            // Generate Customer Data
-            Customer customer = new Customer(faker,czcs);
+            // Generate Data
+            PaymentInfo data = new PaymentInfo(customer, faker);
 
-            // Print Customer Data in JSON format
-            System.out.println(customer.toJSONString());
+            // Print Data in JSON format
+            System.out.println(data.toJSONString());
         }
     }
 

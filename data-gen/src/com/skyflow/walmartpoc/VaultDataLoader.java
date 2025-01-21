@@ -80,7 +80,7 @@ public class VaultDataLoader<T> {
         //System.out.println(extractedFields.toJSONString());
 
         // Extract the values from the JSONObject extractedFields and update the record with the new values
-        replaceWithValuesFromVault(object, insertResponse);
+        replaceWithValuesFromVault(object, extractedFields);
 
         return (String) extractedFields.get("skyflow_id");
     }

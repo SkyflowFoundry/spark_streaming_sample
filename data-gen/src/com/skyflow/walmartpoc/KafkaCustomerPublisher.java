@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
 import com.github.javafaker.Faker;
 
 
-public class KafkaCustomerPublisher<T extends JsonSerializable> implements AutoCloseable {
+public class KafkaCustomerPublisher<T extends SerializableDeserializable> implements AutoCloseable {
 
     final KafkaProducer<String, String> producer;
     final String topic;

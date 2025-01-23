@@ -50,7 +50,6 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse;
-
 import com.skyflow.utils.ReflectionUtils;
 import com.skyflow.utils.ReflectionUtils.VaultObjectInfo;
 
@@ -89,7 +88,7 @@ public class EmrTask {
         }
 
         @SuppressWarnings("unchecked")
-        Class<? extends JsonSerializable> clazz = (Class<? extends JsonSerializable>) Class.forName(args[0]);
+        Class<? extends SerializableDeserializable> clazz = (Class<? extends SerializableDeserializable>) Class.forName(args[0]);
         String outputBucket = args[1];
         String tableName = args[2];
         String kafkaBootstrap = args[3];
@@ -297,7 +296,7 @@ public class EmrTask {
         query.awaitTermination();
     }
 
-    private static <T extends JsonSerializable> JSONObject[] getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
+    private static <T extends SerializableDeserializable> JSONObject[] getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
         System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
         try {
             VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
@@ -309,9 +308,9 @@ public class EmrTask {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T extends JsonSerializable> JSONObject[] _getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
+    private static <T extends SerializableDeserializable> JSONObject[] _getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
         JSONObject[] resultList = new JSONObject[jsons.length];
-        T[] objArray = (T[]) new JsonSerializable[jsons.length];
+        T[] objArray = (T[]) new SerializableDeserializable[jsons.length];
         JSONArray recordsArray = new JSONArray();
 
         int i;

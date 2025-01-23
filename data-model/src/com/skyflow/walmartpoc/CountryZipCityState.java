@@ -20,6 +20,10 @@ class CountryZipCityState {
         this.state = state;
     }
 
+    /*
+     * This loads a "country,zip,city,state,..." dataset in TSV format from a resource file on the classpath.
+     * I get these files from https://www.geonames.org/
+     */
     static List<CountryZipCityState> loadData(String resourcePath) throws IOException {
         List<CountryZipCityState> data = new ArrayList<>();
         try (InputStream is = CountryZipCityState.class.getResourceAsStream("/" + resourcePath);

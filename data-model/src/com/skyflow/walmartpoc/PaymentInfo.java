@@ -12,9 +12,7 @@ import com.skflow.iface.VaultObject;
 
 @VaultObject("customerpaymentdetails")
 @HudiConfig(recordkey_field="paymentID",precombinekey_field="lastupdate_ts")
-public class PaymentInfo implements JsonSerializable {
-    static final String PAYMENT_CSV_HEADER[] = new String[]{"PaymentID", "CustID", "CreditCardNumber", "CardExpiry", "CardCVV", "CardHolderFirstName", "CardHolderLastName", "CardHolderPhoneNumber", "CardHolderAddressLine1", "CardHolderAddressLine2", "CardHolderAddressLine3", "CardHolderCity", "CardHolderState", "CardHolderZip", "CardHolderCountry", "CardHolderEmail", "CardHolderDateOfBirth"};
-
+public class PaymentInfo implements SerializableDeserializable {
     @VaultColumn(upsertColumn=true) String paymentID;
     String custID;
     @VaultColumn String creditCardNumber;
@@ -160,4 +158,30 @@ public class PaymentInfo implements JsonSerializable {
                 "\"lastupdate_ts\":" + lastupdate_ts + "" +
                 "}";
         }
-}
+
+        private static final String CSV_HEADER[] = new String[]{
+            "payment_id", "cust_id", "credit_card_number", "card_expiry", "card_cvv",
+            "cardholder_first_name", "cardholder_last_name", "cardholder_phone_number",
+            "cardholder_address_line_1", "cardholder_address_line_2", "cardholder_address_line_3",
+            "cardholder_city", "cardholder_state", "cardholder_zip", "cardholder_country",
+            "cardholder_email", "cardholder_date_of_birth"};
+        @Override
+        public String[] toCsvRecord() {
+            String[] paymentData = {
+                paymentID, custID, creditCardNumber, cardExpiry, cardCVV,
+                cardHolderFirstName, cardHolderLastName, cardHolderPhoneNumber,
+                cardHolderAddressLine1, cardHolderAddressLine2, cardHolderAddressLine3,
+                cardHolderCity, cardHolderState, cardHolderZip, cardHolderCountry,
+                cardHolderEmail, cardHolderDateOfBirth
+            };
+            return paymentData;
+        }
+
+        static PaymentInfo fromCsvRecord(String[] csvRecord) {
+            return new PaymentInfo(csvRecord);
+        }
+
+        static String[] getCsvHeader() {
+            return CSV_HEADER;
+        }
+    }

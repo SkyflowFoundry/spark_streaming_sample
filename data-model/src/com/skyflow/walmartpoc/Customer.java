@@ -15,9 +15,7 @@ import com.skflow.iface.VaultColumn;
 
 @VaultObject("customeraccount")
 @HudiConfig(recordkey_field="custID",precombinekey_field="lastupdate_ts")
-public class Customer implements JsonSerializable {
-    static final String CUSTOMER_CSV_HEADER[] = new String[]{"CustID", "FirstName", "LastName", "Email", "PhoneNumber", "DateOfBirth", "AddressLine1", "AddressLine2", "AddressLine3", "City", "State", "Zip", "Country"};
-    
+public class Customer implements SerializableDeserializable {
     @VaultColumn(value="customerid",upsertColumn=true, tokenized=false) String custID;
     @VaultColumn String firstName;
     @VaultColumn String lastName;
@@ -140,5 +138,25 @@ public class Customer implements JsonSerializable {
                 "\"country\":\"" + country + "\"" +
                 "\"lastupdate_ts\":" + lastupdate_ts + "" +
                 "}";
+    }
+
+    private static final String CSV_HEADER[] = new String[]{
+        "cust_id", "first_name", "last_name", "email", "phone_number", "date_of_birth",
+        "address_line_1", "address_line_2", "address_line_3", "city", "state", "zip", "country"};
+    @Override
+    public String[] toCsvRecord() {
+        String[] customerData = {
+            custID, firstName, lastName, email, phoneNumber, dateOfBirth,
+            addressLine1, addressLine2, addressLine3, city, state, zip, country
+        };
+        return customerData;
+    }
+
+    static Customer fromCsvRecord(String[] csvRecord) {
+        return new Customer(csvRecord);
+    }
+
+    static String[] getCsvHeader() {
+        return CSV_HEADER;
     }
 }

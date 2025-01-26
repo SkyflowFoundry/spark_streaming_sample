@@ -1,2 +1,5 @@
+.vscode/
+.DS_Store
 target/
-credentials.json
+credentials*.json
+config*.yml

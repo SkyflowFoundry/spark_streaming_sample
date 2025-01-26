@@ -80,10 +80,29 @@ public class EmrTask {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("Version EMR 4");
+        System.out.println("Version EMR 5");
 
-        if (args.length < 12) {
-            System.err.println("Usage: EmrTask <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <aws-region> <secret-name> <vault-id> <vault-url> <batch-size> <batch-delay-secs> <short-circuit-skyflow?>");
+        if (args.length < 14) {
+            System.err.println("Usage: EmrTask <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <batch-size> <batch-delay-secs> <aws-region> <secret-name> <vault-id> <vault-url> <short-circuit-skyflow?> <namespace> <reporting-delay-secs>");
+            System.err.println("Pipeline Type:");
+            System.err.println("  <full.java.class>       : The fully qualified Java class name of the object being processed");
+            System.err.println("Output Instructions:");
+            System.err.println("  <output-s3-bucket>      : The S3 bucket where the output will be stored.");
+            System.err.println("  <table-name>            : The name of the table to be used in the process.");
+            System.err.println("Input Instructions:");
+            System.err.println("  <kafka-bootstrap>       : The Kafka bootstrap server address.");
+            System.err.println("  <kafka-topic>           : The Kafka topic to subscribe to.");
+            System.err.println("  <batch-size>            : The size of each batch to be processed.");
+            System.err.println("  <batch-delay-secs>      : The microbatch size in seconds");
+            System.err.println("Vault Instructions:");
+            System.err.println("  <aws-region>            : The AWS region where resources are located.");
+            System.err.println("  <secret-name>           : The name of the secret in AWS Secrets Manager that stores the vault API key");
+            System.err.println("  <vault-id>              : The ID of the vault to be accessed.");
+            System.err.println("  <vault-url>             : The URL of the vault service.");
+            System.err.println("  <short-circuit-skyflow?>: A boolean flag to determine if Skyflow should be short-circuited.");
+            System.err.println("Metrics Instructions:");
+            System.err.println("  <namespace>             : The Cloudwatch namespace for the metrics. Empty for no Cloudwatch reporting");
+            System.err.println("  <reporting-delay-secs>  : The delay in seconds for reporting metrics.");
             System.exit(1);
         }
 
@@ -93,26 +112,35 @@ public class EmrTask {
         String tableName = args[2];
         String kafkaBootstrap = args[3];
         String kafkaTopic = args[4];
-        String awsRegion = args[5];
-        String secretName = args[6];
-        String vault_id = args[7];
-        String vault_url = args[8];
-        int batchSize = Integer.parseInt(args[9]);
-        int microBatchSeconds = Integer.parseInt(args[10]);
+        int batchSize = Integer.parseInt(args[5]);
+        int microBatchSeconds = Integer.parseInt(args[6]);
+        String awsRegion = args[7];
+        String secretName = args[8];
+        String vault_id = args[9];
+        String vault_url = args[10];
         boolean shortCircuitSkyflow = Boolean.parseBoolean(args[11]);
+        String cloudwatchNamespace = args[12];
+        int reportingDelaySecs = Integer.parseInt(args[13]);
         // For sanity checking, print out all the gathered args
-        System.out.println("Class: " + clazz.getName());
-        System.out.println("Output Bucket: " + outputBucket);
-        System.out.println("Table Name: " + tableName);
-        System.out.println("Kafka Bootstrap: " + kafkaBootstrap);
-        System.out.println("Kafka Topic: " + kafkaTopic);
-        System.out.println("AWS Region: " + awsRegion);
-        System.out.println("Secret Name: " + secretName);
-        System.out.println("Vault ID: " + vault_id);
-        System.out.println("Vault URL: " + vault_url);
-        System.out.println("Batch Size: " + batchSize);
-        System.out.println("Batch delay secs: " + microBatchSeconds);
-        System.out.println("Short Circuit Skyflow: " + shortCircuitSkyflow);
+        System.out.println("Pipeline Type:");
+        System.out.println("  Class: " + clazz.getName());
+        System.out.println("Output Instructions:");
+        System.out.println("  Output Bucket: " + outputBucket);
+        System.out.println("  Table Name: " + tableName);
+        System.out.println("Input Instructions:");
+        System.out.println("  Kafka Bootstrap: " + kafkaBootstrap);
+        System.out.println("  Kafka Topic: " + kafkaTopic);
+        System.out.println("  Batch Size: " + batchSize);
+        System.out.println("  Batch delay secs: " + microBatchSeconds);
+        System.out.println("Vault Instructions:");
+        System.out.println("  AWS Region: " + awsRegion);
+        System.out.println("  Secret Name: " + secretName);
+        System.out.println("  Vault ID: " + vault_id);
+        System.out.println("  Vault URL: " + vault_url);
+        System.out.println("  Short Circuit Skyflow: " + shortCircuitSkyflow);
+        System.out.println("Metrics Instructions:");
+        System.out.println("  Namespace: " + cloudwatchNamespace);
+        System.out.println("  Reporting Delay Secs: " + reportingDelaySecs);
 
         // Retrieve Skyflow SA credential string from Secrets Manager
         String credentialString = getSecret(awsRegion, secretName);
@@ -223,7 +251,7 @@ public class EmrTask {
             public Iterator<Row> call(Iterator<Row> iterator) throws Exception {
                 int partitionId = TaskContext.getPartitionId();
                 System.out.println("Starting partition with ID: " + partitionId);
-                try (final CollectorAndReporter stats = new CollectorAndReporter(kafkaTopic, 10000)) {
+                try (final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000)) {
                     Map<String, String> dimensionMap = new HashMap<>();
                     dimensionMap.put("object", clazz.getSimpleName());
                     ValueDatum numRecords = stats.createOrGetUniqueMetricForName("numRecords", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
@@ -236,7 +264,6 @@ public class EmrTask {
                         List<String> batch = new ArrayList<>();
                         for (int i = 0; i < batchSize && iterator.hasNext(); i++) {
                             numRecords.increment();
-                            //numRecords.increment();
                             batch.add(iterator.next().getString(0)); // There is only one column in the Row: valueString
                         }
                         if (!batch.isEmpty()) {

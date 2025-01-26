@@ -22,7 +22,11 @@ public class CollectorAndReporter implements Closeable {
     private final long configuredIntervalMs;
             
     public CollectorAndReporter(String namespace, long periodInMillisecs) {
-        this.cloudWatch = CloudWatchClient.create();
+        if (namespace == null || namespace.isEmpty()) {
+            this.cloudWatch = null;
+        } else {
+            this.cloudWatch = CloudWatchClient.create();
+        }
         this.namespace = namespace;
         this.lastReportTime = System.currentTimeMillis();
         this.configuredIntervalMs = periodInMillisecs;
@@ -50,7 +54,7 @@ public class CollectorAndReporter implements Closeable {
                 .map(Datum::metricDatum)
                 .filter(metricDatum -> metricDatum != null)
                 .collect(Collectors.toList());
-            //sendToConsole(metricDataList);
+            sendToConsole(metricDataList);
             sendToCloudWatch(metricDataList);
             lastReportTime = currentTime;
         }
@@ -75,11 +79,13 @@ public class CollectorAndReporter implements Closeable {
     }
 
     private void sendToCloudWatch(List<MetricDatum> metricDataList) {
-        PutMetricDataRequest request = PutMetricDataRequest.builder()
-                .namespace(namespace)
-                .metricData(metricDataList)
-                .build();
-        cloudWatch.putMetricData(request);
+        if (cloudWatch!=null) {
+            PutMetricDataRequest request = PutMetricDataRequest.builder()
+                    .namespace(namespace)
+                    .metricData(metricDataList)
+                    .build();
+            cloudWatch.putMetricData(request);
+        }
     }
 
     @Override

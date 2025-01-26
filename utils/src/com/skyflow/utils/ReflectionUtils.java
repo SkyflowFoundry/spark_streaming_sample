@@ -6,8 +6,8 @@ import java.util.Map;
 
 import org.json.simple.JSONObject;
 
-import com.skflow.iface.VaultColumn;
-import com.skflow.iface.VaultObject;
+import com.skyflow.iface.VaultColumn;
+import com.skyflow.iface.VaultObject;
 
 public class ReflectionUtils {
     public static class VaultObjectInfo<T> {

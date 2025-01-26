@@ -7,8 +7,8 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
 import com.github.javafaker.Faker;
-import com.skflow.iface.VaultColumn;
-import com.skflow.iface.VaultObject;
+import com.skyflow.iface.VaultColumn;
+import com.skyflow.iface.VaultObject;
 
 @VaultObject("customerpaymentdetails")
 @HudiConfig(recordkey_field="paymentID",precombinekey_field="lastupdate_ts")

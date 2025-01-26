@@ -5,6 +5,14 @@ Maven
 Make sure you have a vault (schema is in vaultSchema.json). Add its details to config.yml
 Make sure you have a service accounts. Add api-key to AWS secrets manager.
 
+utils
+-----
+Set of utilities used across the other projects
+Build:
+Go to utils/
+mvn clean (if needed)
+mvn package install
+
 data-model
 ----------
 This is only the data model. No executable. Used by the other projects

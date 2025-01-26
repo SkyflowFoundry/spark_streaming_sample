@@ -10,8 +10,8 @@ import org.json.simple.parser.JSONParser;
 import com.github.javafaker.Address;
 import com.github.javafaker.Faker;
 import com.github.javafaker.Name;
-import com.skflow.iface.VaultObject;
-import com.skflow.iface.VaultColumn;
+import com.skyflow.iface.VaultColumn;
+import com.skyflow.iface.VaultObject;
 
 @VaultObject("customeraccount")
 @HudiConfig(recordkey_field="custID",precombinekey_field="lastupdate_ts")

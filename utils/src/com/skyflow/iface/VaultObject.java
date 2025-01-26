@@ -1,4 +1,4 @@
-package com.skflow.iface;
+package com.skyflow.iface;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

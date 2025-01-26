@@ -335,7 +335,8 @@ public class EmrTask {
         insertReqBody.put("tokenization", true);
         insertReqBody.put("upsert", objectInfo.upsertColumnName);
 
-        // Create an HTTP client
+        // Create an HTTP client.
+        // XXX create the client in caller and create and cache a connection. Make a request from the cached connection.
         CloseableHttpClient client = HttpClientBuilder.create().build();
 
         // Create an HTTP request

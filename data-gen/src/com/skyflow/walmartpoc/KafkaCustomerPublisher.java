@@ -102,11 +102,11 @@ public class KafkaCustomerPublisher implements AutoCloseable {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 6) {
-            System.err.println("Usage: " + KafkaCustomerPublisher.class.getName() + " <num-recs> <num-per-second> <kafka-bootstrap> <kafka-topic> <namespace> <reporting-delay-secs>");
+        if (args.length < 5) {
+            System.err.println("Usage: " + KafkaCustomerPublisher.class.getName() + " <load-shape> <kafka-bootstrap> <kafka-topic> <namespace> <reporting-delay-secs>");
             System.err.println("Generation Instructions:");
-            System.err.println("  <num-recs>              : The number of records to generate.");
-            System.err.println("  <num-per-second>        : The number of records to generate per second.");
+            System.err.println("  <load-shape>            : Semicolon separated list of rate,mins pairs: ");
+            System.err.println("                              generate 'rate' (double) records for 'mins' (int) minutes");
             System.err.println("Output Instructions:");
             System.err.println("  <kafka-bootstrap>       : The Kafka bootstrap server address.");
             System.err.println("  <kafka-topic>           : The Kafka topic to subscribe to.");
@@ -115,13 +115,16 @@ public class KafkaCustomerPublisher implements AutoCloseable {
             System.err.println("  <reporting-delay-secs>  : The delay in seconds for reporting metrics.");
             System.exit(1);
         }
-        
-        long numRecs = Long.parseLong(args[0]);
-        double numPerSecond = Double.parseDouble(args[1]);
-        String brokerServer = args[2];
-        String topicName = args[3];
-        String cloudwatchNamespace = args[4];
-        int reportingDelaySecs = Integer.parseInt(args[5]);
+
+        String loadShape = args[0];
+        String brokerServer = args[1];
+        String topicName = args[2];
+        String cloudwatchNamespace = args[3];
+        int reportingDelaySecs = Integer.parseInt(args[4]);
+        if (!loadShape.matches("^(\\d+(\\.\\d+)?,\\d+;)*(\\d+(\\.\\d+)?,\\d+)$")) {
+            System.err.println("Invalid load shape format. Expected format: 'rate,mins;rate,mins;...'");
+            System.exit(1);
+        }
 
         System.setProperty("org.slf4j.simpleLogger.showDateTime", "true");
         System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "yyyy-MM-dd HH:mm:ss");
@@ -137,7 +140,22 @@ public class KafkaCustomerPublisher implements AutoCloseable {
 
         try (final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000);
              final KafkaCustomerPublisher producer = new KafkaCustomerPublisher(brokerServer, topicName, faker, czcs, stats);) {
-                producer.produce_batch_at_rate(numRecs, numPerSecond);
+            String[] loadShapeParts = loadShape.split(";");
+            for (String part : loadShapeParts) {
+                String[] rateAndMins = part.split(",");
+                if (rateAndMins.length != 2) {
+                    logger.error("Invalid load shape format: " + part);
+                    continue;
+                }
+                try {
+                    double rate = Double.parseDouble(rateAndMins[0].trim());
+                    int mins = Integer.parseInt(rateAndMins[1].trim());
+                    logger.info("Generating {} records per second for {} minutes.", rate, mins);
+                    producer.produce_batch_at_rate((long)(rate*mins*60),rate);
+                } catch (NumberFormatException e) {
+                    logger.error("Invalid number format in load shape: " + part, e);
+                }
+            }
         }
         logger.info("Done.");
     }

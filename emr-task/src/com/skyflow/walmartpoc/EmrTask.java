@@ -50,6 +50,10 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.model.GetCallerIdentityRequest;
+import software.amazon.awssdk.services.sts.model.GetCallerIdentityResponse;
+
 import com.skyflow.utils.ReflectionUtils;
 import com.skyflow.utils.ReflectionUtils.VaultObjectInfo;
 
@@ -82,8 +86,8 @@ public class EmrTask {
     public static void main(String[] args) throws Exception {
         System.out.println("Version EMR 5");
 
-        if (args.length < 14) {
-            System.err.println("Usage: EmrTask <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <batch-size> <batch-delay-secs> <aws-region> <secret-name> <vault-id> <vault-url> <short-circuit-skyflow?> <namespace> <reporting-delay-secs>");
+        if (args.length < 15) {
+            System.err.println("Usage: EmrTask <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <kafka-batch-size> <batch-delay-secs> <aws-region> <secret-name> <vault-id> <vault-url> <vault-batch-size> <short-circuit-skyflow?> <namespace> <reporting-delay-secs>");
             System.err.println("Pipeline Type:");
             System.err.println("  <full.java.class>       : The fully qualified Java class name of the object being processed");
             System.err.println("Output Instructions:");
@@ -92,13 +96,14 @@ public class EmrTask {
             System.err.println("Input Instructions:");
             System.err.println("  <kafka-bootstrap>       : The Kafka bootstrap server address.");
             System.err.println("  <kafka-topic>           : The Kafka topic to subscribe to.");
-            System.err.println("  <batch-size>            : The size of each batch to be processed.");
+            System.err.println("  <kafka-batch-size>      : The size of each batch to be processed.");
             System.err.println("  <batch-delay-secs>      : The microbatch size in seconds");
             System.err.println("Vault Instructions:");
             System.err.println("  <aws-region>            : The AWS region where resources are located.");
             System.err.println("  <secret-name>           : The name of the secret in AWS Secrets Manager that stores the vault API key");
             System.err.println("  <vault-id>              : The ID of the vault to be accessed.");
             System.err.println("  <vault-url>             : The URL of the vault service.");
+            System.err.println("  <vault-batch-size>      : The batch size for vault operations.");
             System.err.println("  <short-circuit-skyflow?>: A boolean flag to determine if Skyflow should be short-circuited.");
             System.err.println("Metrics Instructions:");
             System.err.println("  <namespace>             : The Cloudwatch namespace for the metrics. Empty for no Cloudwatch reporting");
@@ -112,15 +117,16 @@ public class EmrTask {
         String tableName = args[2];
         String kafkaBootstrap = args[3];
         String kafkaTopic = args[4];
-        int batchSize = Integer.parseInt(args[5]);
+        int kafkaBatchSize = Integer.parseInt(args[5]);
         int microBatchSeconds = Integer.parseInt(args[6]);
         String awsRegion = args[7];
         String secretName = args[8];
         String vault_id = args[9];
         String vault_url = args[10];
-        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[11]);
-        String cloudwatchNamespace = args[12];
-        int reportingDelaySecs = Integer.parseInt(args[13]);
+        int vaultBatchSize = Integer.parseInt(args[11]);
+        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[12]);
+        String cloudwatchNamespace = args[13];
+        int reportingDelaySecs = Integer.parseInt(args[14]);
         // For sanity checking, print out all the gathered args
         System.out.println("Pipeline Type:");
         System.out.println("  Class: " + clazz.getName());
@@ -130,13 +136,14 @@ public class EmrTask {
         System.out.println("Input Instructions:");
         System.out.println("  Kafka Bootstrap: " + kafkaBootstrap);
         System.out.println("  Kafka Topic: " + kafkaTopic);
-        System.out.println("  Batch Size: " + batchSize);
+        System.out.println("  Kafka Batch Size: " + kafkaBatchSize);
         System.out.println("  Batch delay secs: " + microBatchSeconds);
         System.out.println("Vault Instructions:");
         System.out.println("  AWS Region: " + awsRegion);
         System.out.println("  Secret Name: " + secretName);
         System.out.println("  Vault ID: " + vault_id);
         System.out.println("  Vault URL: " + vault_url);
+        System.out.println("  Vault Batch Size: " + vaultBatchSize);
         System.out.println("  Short Circuit Skyflow: " + shortCircuitSkyflow);
         System.out.println("Metrics Instructions:");
         System.out.println("  Namespace: " + cloudwatchNamespace);
@@ -161,7 +168,7 @@ public class EmrTask {
         hudiOptions.put("hoodie.datasource.write.recordkey.field", hudiConfigAnn.recordkey_field());
         hudiOptions.put("hoodie.datasource.write.precombine.field", hudiConfigAnn.precombinekey_field());
 
-        //printDiagnosticInfoAndFailFast(awsRegion, kafkaBootstrap, outputBucket, vault_url, shortCircuitSkyflow);
+        printDiagnosticInfoAndFailFast(awsRegion, kafkaBootstrap, outputBucket, vault_url, shortCircuitSkyflow);
 
         // Setup Spark
         SparkSession spark = SparkSession.builder()
@@ -211,7 +218,7 @@ public class EmrTask {
                 .option("kafka.bootstrap.servers", kafkaBootstrap)
                 .option("subscribe", kafkaTopic)
                 .option("startingOffsets", "latest")
-                .option("maxOffsetsPerTrigger", batchSize)
+                .option("maxOffsetsPerTrigger", kafkaBatchSize)
                 .option("kafka.security.protocol", "SASL_SSL")
                 .option("kafka.sasl.mechanism", "AWS_MSK_IAM") // The following lines are for reading from AWS MSK via IAM; not valid for standalone Kafka
                 .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")
@@ -262,7 +269,7 @@ public class EmrTask {
                     List<Row> result = new ArrayList<>();
                     while (iterator.hasNext()) {
                         List<String> batch = new ArrayList<>();
-                        for (int i = 0; i < batchSize && iterator.hasNext(); i++) {
+                        for (int i = 0; i < vaultBatchSize && iterator.hasNext(); i++) {
                             numRecords.increment();
                             batch.add(iterator.next().getString(0)); // There is only one column in the Row: valueString
                         }
@@ -446,8 +453,25 @@ public class EmrTask {
         return getSecretValueResponse.secretString();
     }
 
-    @SuppressWarnings("unused")
 	private static void printDiagnosticInfoAndFailFast(String awsRegion, String kafkaBootstrap, String outputBucket, String vault_url, boolean shortCircuitSkyflow) throws Exception {
+        try {
+            StsClient stsClient = StsClient.builder()
+                    .region(Region.of(awsRegion))
+                    .credentialsProvider(DefaultCredentialsProvider.create())
+                    .build();
+
+            GetCallerIdentityRequest getCallerIdentityRequest = GetCallerIdentityRequest.builder().build();
+            GetCallerIdentityResponse getCallerIdentityResponse = stsClient.getCallerIdentity(getCallerIdentityRequest);
+
+            System.out.println("AWS Account: " + getCallerIdentityResponse.account());
+            System.out.println("AWS ARN: " + getCallerIdentityResponse.arn());
+            System.out.println("AWS UserId: " + getCallerIdentityResponse.userId());
+        } catch (Exception e) {
+            System.out.println("Failed to get AWS caller identity: " + e.getMessage());
+            //allGood = false;
+            System.out.println("Ignoring error for now"); // It appears that the EMR master has different IAM role from EMR slave / task. Hence this is only indicative of a few possible problems.
+        }
+
         System.out.println("Current Network settings:"); // Helps make sense of stuff below
         Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
         while (networkInterfaces.hasMoreElements()) {

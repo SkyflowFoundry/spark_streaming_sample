@@ -212,6 +212,11 @@
         <version>1.0-SNAPSHOT</version>
     </dependency>
     
+    <!-- For diagnostics -->
+    <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>sts</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

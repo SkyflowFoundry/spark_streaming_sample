@@ -49,6 +49,9 @@ class ValueDatum extends Datum {
 
     @Override
     public synchronized MetricDatum metricDatum() {
+        if (count == 0) {
+            return null; // No data to report
+        }
         MetricDatum result = MetricDatum.builder()
                                   .metricName(metricName)
                                   .dimensions(dimensions)
@@ -95,7 +98,7 @@ class StatisticDatum extends Datum {
                 .maximum(max)
                 .build();
 
-            MetricDatum result = MetricDatum.builder()
+        MetricDatum result = MetricDatum.builder()
                 .metricName(metricName)
                 .dimensions(dimensions)
                 .unit(unit)

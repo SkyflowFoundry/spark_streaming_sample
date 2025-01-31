@@ -130,7 +130,6 @@ public class KafkaCustomerPublisher implements AutoCloseable {
         System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "yyyy-MM-dd HH:mm:ss");
         System.setProperty("org.slf4j.simpleLogger.logFile", "System.out");
         System.setProperty("org.slf4j.simpleLogger.log.org.slf4j.MDC", "instanceId");
-
         logger.info("Broker: " + brokerServer);
         logger.info("Topic: " + topicName);
 
@@ -138,6 +137,7 @@ public class KafkaCustomerPublisher implements AutoCloseable {
         List<CountryZipCityState> czcs = CountryZipCityState.loadData("US.tsv");
         Faker faker = new Faker();
 
+        long totalRecs = 0;
         try (final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000);
              final KafkaCustomerPublisher producer = new KafkaCustomerPublisher(brokerServer, topicName, faker, czcs, stats);) {
             String[] loadShapeParts = loadShape.split(";");
@@ -150,13 +150,15 @@ public class KafkaCustomerPublisher implements AutoCloseable {
                 try {
                     double rate = Double.parseDouble(rateAndMins[0].trim());
                     int mins = Integer.parseInt(rateAndMins[1].trim());
-                    logger.info("Generating {} records per second for {} minutes.", rate, mins);
-                    producer.produce_batch_at_rate((long)(rate*mins*60),rate);
+                    long numRecs = (long)(rate*mins*60);
+                    logger.info("Generating {} records at {} per second for {} minutes.", numRecs, rate, mins);
+                    producer.produce_batch_at_rate(numRecs,rate);
+                    totalRecs += numRecs;
                 } catch (NumberFormatException e) {
                     logger.error("Invalid number format in load shape: " + part, e);
                 }
             }
         }
-        logger.info("Done.");
+        logger.info("Done. Generated {} records in all.", totalRecs);
     }
 }

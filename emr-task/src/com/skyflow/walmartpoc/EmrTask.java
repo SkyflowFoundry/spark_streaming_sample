@@ -275,7 +275,7 @@ public class EmrTask {
         if (args.length < 16) {
             System.err.println("Usage: EmrTask <localIO> <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <kafka-batch-size> <batch-delay-secs> <aws-region> <secret-name> <vault-id> <vault-url> <vault-batch-size> <short-circuit-skyflow?> <namespace> <reporting-delay-secs>");
             System.err.println("Pipeline Type:");
-            System.err.println("  <localIO>               : A boolean flag to determine if input comes from local socket and output to the console.");
+            System.err.println("  <localIO>               : A boolean flag to determine if input comes from plaintext kafka and output to the console.");
             System.err.println("  <full.java.class>       : The fully qualified Java class name of the object being processed");
             System.err.println("Output Instructions:");
             System.err.println("  <output-s3-bucket>      : The S3 bucket where the output will be stored.");
@@ -453,7 +453,7 @@ public class EmrTask {
     private static Dataset<Row> buildInputDF(SparkSession spark, boolean localIO, String kafkaBootstrap, String kafkaTopic, int kafkaBatchSize) {
         Map<String, String> kafkaSecurityOptions = new HashMap<>();
         if (localIO) {
-            kafkaSecurityOptions.put("kafka.security.protocol", "PLAINTEX");
+            kafkaSecurityOptions.put("kafka.security.protocol", "PLAINTEXT");
         } else {
             kafkaSecurityOptions.put("kafka.security.protocol", "SASL_SSL");
             kafkaSecurityOptions.put("kafka.sasl.mechanism", "AWS_MSK_IAM"); // The following lines are for reading from AWS MSK via IAM; not valid for standalone Kafka
@@ -462,7 +462,7 @@ public class EmrTask {
             kafkaSecurityOptions.put("sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler"); // ... does the trick! :) XXX
         }
         // Get the input stream
-        /* *
+        /* */
         Dataset<Row> inputDF = spark
                 .readStream()
                 .format("kafka")
@@ -486,7 +486,7 @@ public class EmrTask {
                                             .toDF("valueString").withColumn("key", functions.lit(""));
         //kafkaDF.foreach((ForeachFunction<Row>) row -> System.out.println(row.schema() + "  " + row.length() + " " + row.prettyJson()));System.exit(0);
         /* */
-        /* */
+        /* *
         // For testing with streaming: read from socket
         Dataset<Row> inputDF = spark
             .readStream()

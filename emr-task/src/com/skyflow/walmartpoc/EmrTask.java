@@ -366,48 +366,8 @@ public class EmrTask {
         String hudiTablePath = outputBucket + "/tables";
         Map<String,String> hudiOptions = getHudiOptions(clazz, outputBucket, tableName);
 
-        // Get the input stream
-        final Dataset<Row> inputDF;
-        if (!localIO) {
-            // For real-use: Read from Kafka
-            inputDF = spark
-                .readStream()
-                .format("kafka")
-                .option("kafka.bootstrap.servers", kafkaBootstrap)
-                .option("subscribe", kafkaTopic)
-                .option("startingOffsets", "latest")
-                .option("maxOffsetsPerTrigger", kafkaBatchSize)
-                .option("kafka.security.protocol", "SASL_SSL")
-                .option("kafka.sasl.mechanism", "AWS_MSK_IAM") // The following lines are for reading from AWS MSK via IAM; not valid for standalone Kafka
-                .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")
-                .option("kafka.sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler") // Not sure which one ...
-                .option("sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler") // ... does the trick! :) XXX
-                .load()
-                .selectExpr("CAST(value AS STRING) as valueString");
-        } else {
-            /* *
-            // For testing WITHOUT sreaming: ceate a static array of strings
-            String[] dataArray = {
-                "{\"custID\":\"0ff79fbb-9d97-46bd-8ad0-1762bda6a336\",\"firstName\":\"Russell\",\"lastName\":\"Champlin\",\"email\":\"delmer.berge@gmail.com\",\"phoneNumber\":\"(013) 728-8519\",\"dateOfBirth\":\"1998-10-31\",\"addressLine1\":\"66975 Tillman Square\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"Bashirianfurt\",\"state\":\"Texas\",\"zip\":\"47279\",\"country\":\"Italy\"}",
-                "{\"custID\":\"cd025dfb-b8d8-44a0-a90b-b7bf393ab3e2\",\"firstName\":\"William\",\"lastName\":\"Reichert\",\"email\":\"pierre.purdy@hotmail.com\",\"phoneNumber\":\"(811) 302-0400\",\"dateOfBirth\":\"2002-07-15\",\"addressLine1\":\"7657 Conn Station\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"South Caprice\",\"state\":\"Pennsylvania\",\"zip\":\"83315\",\"country\":\"Saint Vincent and the Grenadines\"}",
-                "{\"custID\":\"23cf4fdf-b81d-4fa9-a3ae-62f598c6a904\",\"firstName\":\"Janna\",\"lastName\":\"Ebert\",\"email\":\"michal.walker@gmail.com\",\"phoneNumber\":\"616-614-7844 x243\",\"dateOfBirth\":\"1995-05-29\",\"addressLine1\":\"0514 Hammes Dam\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"Lake Winfred\",\"state\":\"Nevada\",\"zip\":\"21167-7796\",\"country\":\"Bouvet Island (Bouvetoya)\"}"
-            };
-            inputDF = spark.createDataset(Arrays.asList(dataArray), Encoders.STRING())
-                                                .toDF("valueString").withColumn("key", functions.lit(""));
-            //kafkaDF.foreach((ForeachFunction<Row>) row -> System.out.println(row.schema() + "  " + row.length() + " " + row.prettyJson()));System.exit(0);
-            /* */
-            /* */
-            // For testing with streaming: read from socket
-            inputDF = spark
-                .readStream()
-                .format("org.apache.spark.sql.execution.streaming.TextSocketSourceProvider")
-                .option("host", "localhost")
-                .option("port", 9999)
-                .option("maxOffsetsPerTrigger", kafkaBatchSize)
-                .load()
-                .selectExpr("CAST(value AS STRING) as valueString");
-            /* */
-        }
+        // Build input data frame
+        Dataset<Row> inputDF = buildInputDF(spark, localIO, kafkaBootstrap, kafkaTopic, kafkaBatchSize);
 
         // Tokenize sensitive fields using Skyflow.
 
@@ -488,6 +448,57 @@ public class EmrTask {
         // System.out.println(fields);
         // System.out.println(schema);
         return schema;
+    }
+
+    private static Dataset<Row> buildInputDF(SparkSession spark, boolean localIO, String kafkaBootstrap, String kafkaTopic, int kafkaBatchSize) {
+        Map<String, String> kafkaSecurityOptions = new HashMap<>();
+        if (localIO) {
+            kafkaSecurityOptions.put("kafka.security.protocol", "PLAINTEX");
+        } else {
+            kafkaSecurityOptions.put("kafka.security.protocol", "SASL_SSL");
+            kafkaSecurityOptions.put("kafka.sasl.mechanism", "AWS_MSK_IAM"); // The following lines are for reading from AWS MSK via IAM; not valid for standalone Kafka
+            kafkaSecurityOptions.put("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;");
+            kafkaSecurityOptions.put("kafka.sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler"); // Not sure which one ...
+            kafkaSecurityOptions.put("sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler"); // ... does the trick! :) XXX
+        }
+        // Get the input stream
+        /* *
+        Dataset<Row> inputDF = spark
+                .readStream()
+                .format("kafka")
+                .option("kafka.bootstrap.servers", kafkaBootstrap)
+                .option("subscribe", kafkaTopic)
+                .option("startingOffsets", "latest")
+                .option("maxOffsetsPerTrigger", kafkaBatchSize)
+            .options(kafkaSecurityOptions)
+            .load()
+            .selectExpr("CAST(value AS STRING) as valueString")
+        ;
+        /* */
+        /* *
+        // For testing WITHOUT sreaming: ceate a static array of strings
+        String[] dataArray = {
+            "{\"custID\":\"0ff79fbb-9d97-46bd-8ad0-1762bda6a336\",\"firstName\":\"Russell\",\"lastName\":\"Champlin\",\"email\":\"delmer.berge@gmail.com\",\"phoneNumber\":\"(013) 728-8519\",\"dateOfBirth\":\"1998-10-31\",\"addressLine1\":\"66975 Tillman Square\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"Bashirianfurt\",\"state\":\"Texas\",\"zip\":\"47279\",\"country\":\"Italy\"}",
+            "{\"custID\":\"cd025dfb-b8d8-44a0-a90b-b7bf393ab3e2\",\"firstName\":\"William\",\"lastName\":\"Reichert\",\"email\":\"pierre.purdy@hotmail.com\",\"phoneNumber\":\"(811) 302-0400\",\"dateOfBirth\":\"2002-07-15\",\"addressLine1\":\"7657 Conn Station\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"South Caprice\",\"state\":\"Pennsylvania\",\"zip\":\"83315\",\"country\":\"Saint Vincent and the Grenadines\"}",
+            "{\"custID\":\"23cf4fdf-b81d-4fa9-a3ae-62f598c6a904\",\"firstName\":\"Janna\",\"lastName\":\"Ebert\",\"email\":\"michal.walker@gmail.com\",\"phoneNumber\":\"616-614-7844 x243\",\"dateOfBirth\":\"1995-05-29\",\"addressLine1\":\"0514 Hammes Dam\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"Lake Winfred\",\"state\":\"Nevada\",\"zip\":\"21167-7796\",\"country\":\"Bouvet Island (Bouvetoya)\"}"
+        };
+        Dataset<Row> inputDF = spark.createDataset(Arrays.asList(dataArray), Encoders.STRING())
+                                            .toDF("valueString").withColumn("key", functions.lit(""));
+        //kafkaDF.foreach((ForeachFunction<Row>) row -> System.out.println(row.schema() + "  " + row.length() + " " + row.prettyJson()));System.exit(0);
+        /* */
+        /* */
+        // For testing with streaming: read from socket
+        Dataset<Row> inputDF = spark
+            .readStream()
+            .format("org.apache.spark.sql.execution.streaming.TextSocketSourceProvider")
+            .option("host", "localhost")
+            .option("port", 9999)
+            .option("maxOffsetsPerTrigger", kafkaBatchSize)
+            .load()
+            .selectExpr("CAST(value AS STRING) as valueString");
+        /* */
+
+        return inputDF;
     }
 
     private static Map<String, String> getHudiOptions(Class<? extends SerializableDeserializable> clazz, String outputBucket,

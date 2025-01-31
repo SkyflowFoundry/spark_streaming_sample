@@ -72,7 +72,7 @@ public class CollectorAndReporter implements AutoCloseable {
                 StatisticSet s = datum.statisticValues();
                 System.out.print("Statistic Set: ");
                 System.out.print("  Count: " + s.sampleCount());
-                System.out.print("  Avg: " + (s.sampleCount()/s.sum()));
+                System.out.print("  Avg: " + (s.sum()/s.sampleCount()));
                 System.out.print("  Min: " + s.minimum());
                 System.out.println("  Max: " + s.maximum());
             }

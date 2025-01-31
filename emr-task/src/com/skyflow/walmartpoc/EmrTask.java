@@ -33,7 +33,9 @@ import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.*;
+import org.apache.spark.sql.SparkSession.Builder;
 import org.apache.spark.sql.streaming.Trigger;
+import org.apache.spark.sql.streaming.DataStreamWriter;
 import org.apache.spark.sql.streaming.StreamingQuery;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
@@ -83,12 +85,198 @@ public class EmrTask {
         }
     }
 
-    public static void main(String[] args) throws Exception {
-        System.out.println("Version EMR 5");
+    private static class BatchProcessor implements MapPartitionsFunction<Row, Row> {
+        private final String cloudwatchNamespace;
+        private final int reportingDelaySecs;
+        private final Class<? extends SerializableDeserializable> clazz;
+        private final int vaultBatchSize;
+        private final String vault_id;
+        private final String vault_url;
+        private final String credentialString;
+        private final boolean shortCircuitSkyflow;
 
-        if (args.length < 15) {
-            System.err.println("Usage: EmrTask <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <kafka-batch-size> <batch-delay-secs> <aws-region> <secret-name> <vault-id> <vault-url> <vault-batch-size> <short-circuit-skyflow?> <namespace> <reporting-delay-secs>");
+        public BatchProcessor(String cloudwatchNamespace, int reportingDelaySecs, Class<? extends SerializableDeserializable> clazz,
+                              int vaultBatchSize, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow) {
+            this.cloudwatchNamespace = cloudwatchNamespace;
+            this.reportingDelaySecs = reportingDelaySecs;
+            this.clazz = clazz;
+            this.vaultBatchSize = vaultBatchSize;
+            this.vault_id = vault_id;
+            this.vault_url = vault_url;
+            this.credentialString = credentialString;
+            this.shortCircuitSkyflow = shortCircuitSkyflow;
+        }
+
+        @Override
+        public Iterator<Row> call(Iterator<Row> iterator) throws Exception {
+            int partitionId = TaskContext.getPartitionId();
+            System.out.println("Starting partition with ID: " + partitionId);
+            try (final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000)) {
+                Map<String, String> dimensionMap = new HashMap<>();
+                dimensionMap.put("object", clazz.getSimpleName());
+                ValueDatum numRecords = stats.createOrGetUniqueMetricForName("emrRecordsProcessed", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+                ValueDatum numSkyflowBatches = stats.createOrGetUniqueMetricForName("numSkyflowBatches", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+                ValueDatum numKafkaBatches = stats.createOrGetUniqueMetricForName("numKafkaBatches", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+                StatisticDatum skyflowBatchSizes = stats.createOrGetUniqueMetricForName("skyflowBatchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
+                StatisticDatum kafkaBatchSizes = stats.createOrGetUniqueMetricForName("kafkaBatchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
+                StatisticDatum apiLatency = stats.createOrGetUniqueMetricForName("apiLatency", dimensionMap, StandardUnit.MILLISECONDS, StatisticDatum.class);
+
+                numKafkaBatches.increment();
+                long kafkaBatchSize=0;
+                List<Row> result = new ArrayList<>();
+                while (iterator.hasNext()) {
+                    List<String> batch = new ArrayList<>();
+                    for (int i = 0; i < vaultBatchSize && iterator.hasNext(); i++) {
+                        numRecords.increment();
+                        kafkaBatchSize++;
+                        batch.add(iterator.next().getString(0)); // There is only one column in the Row: valueString
+                    }
+                    if (!batch.isEmpty()) {
+                        numSkyflowBatches.increment();
+                        skyflowBatchSizes.value(batch.size());
+
+                        // Process the batch
+                        JSONObject[] transformed = getTokenizedObjects(
+                            partitionId,
+                            apiLatency,
+                            batch.toArray(new String[0]),
+                            vault_id,
+                            vault_url,
+                            credentialString,
+                            shortCircuitSkyflow,
+                            clazz
+                        );
+                        for (JSONObject obj : transformed) {
+                            @SuppressWarnings("unchecked")
+                            TreeMap<String, Object> sortedMap = new TreeMap<>(obj);
+                            result.add(RowFactory.create(sortedMap.values().toArray()));
+                        }
+                    }
+                    stats.pollAndReport(false);
+                }
+                kafkaBatchSizes.value(kafkaBatchSize);
+                System.out.println("Processed " + result.size() + " items in partition with ID: " + partitionId);
+                return result.iterator();
+            }
+        }
+
+        private static <T extends SerializableDeserializable> JSONObject[] getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
+            System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
+            try {
+                VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
+                VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
+                return _getTokenizedObjects(partitionId, apiLatency, jsons, vault_id, vault_url, credentialString, shortCircuitSkyflow, objectInfo, clazz);
+            } catch (Exception e) {
+                throw new Exception("NOT-FOR-PRODUCTION: Failed to process: " + String.join(", ", jsons), e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        private static <T extends SerializableDeserializable> JSONObject[] _getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
+            JSONObject[] resultList = new JSONObject[jsons.length];
+            T[] objArray = (T[]) new SerializableDeserializable[jsons.length];
+            JSONArray recordsArray = new JSONArray();
+
+            int i;
+            i=0;
+            for (String json : jsons) {
+                //System.out.println(" ("+ partitionId + ") recv: " + json);
+                T obj = clazz.getConstructor(String.class).newInstance(json);
+                objArray[i] = obj;
+                JSONObject record = new JSONObject();
+                record.put("table", objectInfo.tableName);
+
+                JSONObject fields = ReflectionUtils.jsonObjectForVault(obj, objectInfo);
+                record.put("fields", fields);
+                recordsArray.add(record);
+                i = i + 1;
+            }
+
+            // Create a JSON/REST request to "vault_url" for inserting records
+            String insertRecordUrl = vault_url + "/v1/vaults/" + vault_id + "/" + objectInfo.tableName;
+            JSONObject insertReqBody = new JSONObject();
+            insertReqBody.put("records", recordsArray);
+            insertReqBody.put("tokenization", true);
+            insertReqBody.put("upsert", objectInfo.upsertColumnName);
+
+            // Create an HTTP client.
+            // XXX create the client in caller and create and cache a connection. Make a request from the cached connection.
+            CloseableHttpClient client = HttpClientBuilder.create().build();
+
+            // Create an HTTP request
+            ClassicHttpRequest request = ClassicRequestBuilder
+                .post(URI.create(insertRecordUrl))
+                .addHeader("Authorization", "Bearer " + credentialString)
+                .setEntity(insertReqBody.toJSONString(), ContentType.APPLICATION_JSON)
+                .build();
+
+            if (!shortCircuitSkyflow) {
+                long startTime = System.currentTimeMillis();
+                // Send the request and get the response
+                @SuppressWarnings("deprecation") // We NEED the synch call
+                final CloseableHttpResponse response = client.execute(request);
+                if (response.getCode() != 200) {
+                    String statusLine = response.getReasonPhrase();
+                    response.close();
+                    client.close();
+                    throw new Exception("http response: " + statusLine);
+                }
+
+                // Parse the response body as JSON
+                JSONParser jsonParser = new JSONParser();
+                String bodyString = null;
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()))) {
+                    bodyString = reader.lines().collect(Collectors.joining("\n"));
+                } finally {
+                    apiLatency.value(System.currentTimeMillis() - startTime);
+                    response.close();
+                    client.close();
+                }
+
+                JSONObject insertResponse = (JSONObject) jsonParser.parse(bodyString);
+                JSONArray responseRecords = (JSONArray) insertResponse.get("records");
+
+                if (responseRecords.size() != jsons.length) {
+                    throw new RuntimeException("Skyflow was asked to upsert " + jsons.length + " records and returned " + responseRecords.size() + " results");
+                }
+                for (i = 0; i < responseRecords.size(); i++) {
+                    JSONObject responseRecord = (JSONObject) responseRecords.get(i);
+                    JSONObject extractedFields = (JSONObject) responseRecord.get("tokens");
+                    String skyflow_id = (String) responseRecord.get("skyflow_id");
+
+                    T obj = objArray[i];
+                    ReflectionUtils.replaceWithValuesFromVault(obj, extractedFields, objectInfo);
+
+                    String objectJson = obj.toJSONString();
+                    JSONParser parser = new JSONParser();
+                    JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
+                    jsonObject.put("skyflow_id", skyflow_id);
+                    resultList[i] = jsonObject;
+                }
+            } else {
+                i = 0;
+                for (T obj : objArray) {
+                    //System.out.println(" ("+ partitionId + ") sim send: " + obj);
+                    String objectJson = obj.toJSONString();
+                    JSONParser parser = new JSONParser();
+                    JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
+                    jsonObject.put("skyflow_id", "skipped");
+                    resultList[i] =jsonObject;
+                    i = i + 1;
+                }
+            }
+
+            return resultList;
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("Version EMR 7");
+
+        if (args.length < 16) {
+            System.err.println("Usage: EmrTask <localIO> <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <kafka-batch-size> <batch-delay-secs> <aws-region> <secret-name> <vault-id> <vault-url> <vault-batch-size> <short-circuit-skyflow?> <namespace> <reporting-delay-secs>");
             System.err.println("Pipeline Type:");
+            System.err.println("  <localIO>               : A boolean flag to determine if input comes from local socket and output to the console.");
             System.err.println("  <full.java.class>       : The fully qualified Java class name of the object being processed");
             System.err.println("Output Instructions:");
             System.err.println("  <output-s3-bucket>      : The S3 bucket where the output will be stored.");
@@ -111,24 +299,26 @@ public class EmrTask {
             System.exit(1);
         }
 
+        boolean localIO = Boolean.parseBoolean(args[0]);
         @SuppressWarnings("unchecked")
-        Class<? extends SerializableDeserializable> clazz = (Class<? extends SerializableDeserializable>) Class.forName(args[0]);
-        String outputBucket = args[1];
-        String tableName = args[2];
-        String kafkaBootstrap = args[3];
-        String kafkaTopic = args[4];
-        int kafkaBatchSize = Integer.parseInt(args[5]);
-        int microBatchSeconds = Integer.parseInt(args[6]);
-        String awsRegion = args[7];
-        String secretName = args[8];
-        String vault_id = args[9];
-        String vault_url = args[10];
-        int vaultBatchSize = Integer.parseInt(args[11]);
-        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[12]);
-        String cloudwatchNamespace = args[13];
-        int reportingDelaySecs = Integer.parseInt(args[14]);
+        Class<? extends SerializableDeserializable> clazz = (Class<? extends SerializableDeserializable>) Class.forName(args[1]);
+        String outputBucket = args[2];
+        String tableName = args[3];
+        String kafkaBootstrap = args[4];
+        String kafkaTopic = args[5];
+        int kafkaBatchSize = Integer.parseInt(args[6]);
+        int microBatchSeconds = Integer.parseInt(args[7]);
+        String awsRegion = args[8];
+        String secretName = args[9];
+        String vault_id = args[10];
+        String vault_url = args[11];
+        int vaultBatchSize = Integer.parseInt(args[12]);
+        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[13]);
+        String cloudwatchNamespace = args[14];
+        int reportingDelaySecs = Integer.parseInt(args[15]);
         // For sanity checking, print out all the gathered args
         System.out.println("Pipeline Type:");
+        System.out.println("  Local IO: " + localIO);
         System.out.println("  Class: " + clazz.getName());
         System.out.println("Output Instructions:");
         System.out.println("  Output Bucket: " + outputBucket);
@@ -149,38 +339,128 @@ public class EmrTask {
         System.out.println("  Namespace: " + cloudwatchNamespace);
         System.out.println("  Reporting Delay Secs: " + reportingDelaySecs);
 
+        if (!localIO) {
+            printDiagnosticInfoAndFailFast(awsRegion, kafkaBootstrap, outputBucket, vault_url, shortCircuitSkyflow);
+        }
+
         // Retrieve Skyflow SA credential string from Secrets Manager
         String credentialString = getSecret(awsRegion, secretName);
 
-        // gather output options
-        String hudiTablePath = outputBucket + "/tables";
-        String hudiTableName = tableName;
-
-        // Configure Hudi Write
-        Map<String, String> hudiOptions = new HashMap<>();
-        hudiOptions.put("hoodie.table.name", hudiTableName);
-        hudiOptions.put("hoodie.datasource.write.operation", "upsert");
-        hudiOptions.put("hoodie.datasource.hive_sync.enable", "false");
-        hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ");
-
-        HudiConfig hudiConfigAnn = clazz.getAnnotation(HudiConfig.class);
-        //hudiOptions.put("hoodie.datasource.write.partitionpath.field", hudiConfigAnn.partitionpathkey_field());
-        hudiOptions.put("hoodie.datasource.write.recordkey.field", hudiConfigAnn.recordkey_field());
-        hudiOptions.put("hoodie.datasource.write.precombine.field", hudiConfigAnn.precombinekey_field());
-
-        printDiagnosticInfoAndFailFast(awsRegion, kafkaBootstrap, outputBucket, vault_url, shortCircuitSkyflow);
-
         // Setup Spark
-        SparkSession spark = SparkSession.builder()
+        Builder sparkBuilder = SparkSession.builder()
                 .appName("MSK to Hudi Job")
-                //.master("local[1]").config("spark.local.dir", "/tmp/spark-temp") //  Uncomment to run Spark locally
                 .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
                 .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") // Maybe s3:// would perform better? XXX
-                .getOrCreate();
-
+        ;
+        if (localIO) {
+            sparkBuilder = sparkBuilder
+                .master("local[1]").config("spark.local.dir", "/tmp/spark-temp") //  Uncomment to run Spark locally
+            ;
+        }
+        SparkSession spark = sparkBuilder.getOrCreate();
         spark.sparkContext().setLogLevel("INFO");
 
         // Generate schema for given class using Java reflection
+        StructType schema = getSchema(clazz);
+
+        // gather output options
+        String hudiTablePath = outputBucket + "/tables";
+        Map<String,String> hudiOptions = getHudiOptions(clazz, outputBucket, tableName);
+
+        // Get the input stream
+        final Dataset<Row> inputDF;
+        if (!localIO) {
+            // For real-use: Read from Kafka
+            inputDF = spark
+                .readStream()
+                .format("kafka")
+                .option("kafka.bootstrap.servers", kafkaBootstrap)
+                .option("subscribe", kafkaTopic)
+                .option("startingOffsets", "latest")
+                .option("maxOffsetsPerTrigger", kafkaBatchSize)
+                .option("kafka.security.protocol", "SASL_SSL")
+                .option("kafka.sasl.mechanism", "AWS_MSK_IAM") // The following lines are for reading from AWS MSK via IAM; not valid for standalone Kafka
+                .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")
+                .option("kafka.sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler") // Not sure which one ...
+                .option("sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler") // ... does the trick! :) XXX
+                .load()
+                .selectExpr("CAST(value AS STRING) as valueString");
+        } else {
+            /* *
+            // For testing WITHOUT sreaming: ceate a static array of strings
+            String[] dataArray = {
+                "{\"custID\":\"0ff79fbb-9d97-46bd-8ad0-1762bda6a336\",\"firstName\":\"Russell\",\"lastName\":\"Champlin\",\"email\":\"delmer.berge@gmail.com\",\"phoneNumber\":\"(013) 728-8519\",\"dateOfBirth\":\"1998-10-31\",\"addressLine1\":\"66975 Tillman Square\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"Bashirianfurt\",\"state\":\"Texas\",\"zip\":\"47279\",\"country\":\"Italy\"}",
+                "{\"custID\":\"cd025dfb-b8d8-44a0-a90b-b7bf393ab3e2\",\"firstName\":\"William\",\"lastName\":\"Reichert\",\"email\":\"pierre.purdy@hotmail.com\",\"phoneNumber\":\"(811) 302-0400\",\"dateOfBirth\":\"2002-07-15\",\"addressLine1\":\"7657 Conn Station\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"South Caprice\",\"state\":\"Pennsylvania\",\"zip\":\"83315\",\"country\":\"Saint Vincent and the Grenadines\"}",
+                "{\"custID\":\"23cf4fdf-b81d-4fa9-a3ae-62f598c6a904\",\"firstName\":\"Janna\",\"lastName\":\"Ebert\",\"email\":\"michal.walker@gmail.com\",\"phoneNumber\":\"616-614-7844 x243\",\"dateOfBirth\":\"1995-05-29\",\"addressLine1\":\"0514 Hammes Dam\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"Lake Winfred\",\"state\":\"Nevada\",\"zip\":\"21167-7796\",\"country\":\"Bouvet Island (Bouvetoya)\"}"
+            };
+            inputDF = spark.createDataset(Arrays.asList(dataArray), Encoders.STRING())
+                                                .toDF("valueString").withColumn("key", functions.lit(""));
+            //kafkaDF.foreach((ForeachFunction<Row>) row -> System.out.println(row.schema() + "  " + row.length() + " " + row.prettyJson()));System.exit(0);
+            /* */
+            /* */
+            // For testing with streaming: read from socket
+            inputDF = spark
+                .readStream()
+                .format("org.apache.spark.sql.execution.streaming.TextSocketSourceProvider")
+                .option("host", "localhost")
+                .option("port", 9999)
+                .option("maxOffsetsPerTrigger", kafkaBatchSize)
+                .load()
+                .selectExpr("CAST(value AS STRING) as valueString");
+            /* */
+        }
+
+        // Tokenize sensitive fields using Skyflow.
+
+        MapPartitionsFunction<Row, Row> transformer = new BatchProcessor(
+            cloudwatchNamespace,
+            reportingDelaySecs,
+            clazz,
+            vaultBatchSize,
+            vault_id,
+            vault_url,
+            credentialString,
+            shortCircuitSkyflow
+        );
+        Dataset<Row> transformedDF = inputDF.mapPartitions(transformer, Encoders.row(schema));
+
+        // Output
+
+        // Let's do a continuous micro-batch every few seconds
+        DataStreamWriter<Row> streamWriter = transformedDF
+            .writeStream()
+            .option("checkpointLocation", outputBucket + "/checkpoints")
+            .trigger(Trigger.ProcessingTime(microBatchSeconds + " seconds"))
+        ;
+        if(localIO) {
+            streamWriter = streamWriter
+                .format("console").option("truncate",false).option("numRows",40)
+            ;
+        } else {
+            streamWriter = streamWriter
+                .format("hudi").outputMode("append")
+                .options(hudiOptions)
+                .option("path", hudiTablePath)
+            ;
+        }
+        final StreamingQuery query = streamWriter.start();
+
+        // Wait for termination signal
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                if (query != null && query.isActive()) {
+                    query.stop();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }));
+
+        // Run the pipeline!!
+        query.awaitTermination();
+    }
+
+    private static StructType getSchema(Class<?> clazz) {
         List<StructField> fields = new ArrayList<>();
         fields.add(new StructField("skyflow_id", DataTypes.StringType, false, null));
         Field[] classFields = clazz.getDeclaredFields();
@@ -208,235 +488,26 @@ public class EmrTask {
         StructType schema = DataTypes.createStructType(fields);
         // System.out.println(fields);
         // System.out.println(schema);
-
-        // Get the input stream
-        /* */
-        // For real-use: Read from Kafka
-        Dataset<Row> kafkaDF = spark
-                .readStream()
-                .format("kafka")
-                .option("kafka.bootstrap.servers", kafkaBootstrap)
-                .option("subscribe", kafkaTopic)
-                .option("startingOffsets", "latest")
-                .option("maxOffsetsPerTrigger", kafkaBatchSize)
-                .option("kafka.security.protocol", "SASL_SSL")
-                .option("kafka.sasl.mechanism", "AWS_MSK_IAM") // The following lines are for reading from AWS MSK via IAM; not valid for standalone Kafka
-                .option("kafka.sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;")
-                .option("kafka.sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler") // Not sure which one ...
-                .option("sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler") // ... does the trick! :) XXX
-                .load()
-                .selectExpr("CAST(value AS STRING) as valueString");
-        /* */
-        /* *
-        // For testing WITHOUT sreaming: ceate a static array of strings
-        String[] dataArray = {
-            "{\"custID\":\"0ff79fbb-9d97-46bd-8ad0-1762bda6a336\",\"firstName\":\"Russell\",\"lastName\":\"Champlin\",\"email\":\"delmer.berge@gmail.com\",\"phoneNumber\":\"(013) 728-8519\",\"dateOfBirth\":\"1998-10-31\",\"addressLine1\":\"66975 Tillman Square\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"Bashirianfurt\",\"state\":\"Texas\",\"zip\":\"47279\",\"country\":\"Italy\"}",
-            "{\"custID\":\"cd025dfb-b8d8-44a0-a90b-b7bf393ab3e2\",\"firstName\":\"William\",\"lastName\":\"Reichert\",\"email\":\"pierre.purdy@hotmail.com\",\"phoneNumber\":\"(811) 302-0400\",\"dateOfBirth\":\"2002-07-15\",\"addressLine1\":\"7657 Conn Station\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"South Caprice\",\"state\":\"Pennsylvania\",\"zip\":\"83315\",\"country\":\"Saint Vincent and the Grenadines\"}",
-            "{\"custID\":\"23cf4fdf-b81d-4fa9-a3ae-62f598c6a904\",\"firstName\":\"Janna\",\"lastName\":\"Ebert\",\"email\":\"michal.walker@gmail.com\",\"phoneNumber\":\"616-614-7844 x243\",\"dateOfBirth\":\"1995-05-29\",\"addressLine1\":\"0514 Hammes Dam\",\"addressLine2\":\"\",\"addressLine3\":\"\",\"city\":\"Lake Winfred\",\"state\":\"Nevada\",\"zip\":\"21167-7796\",\"country\":\"Bouvet Island (Bouvetoya)\"}"
-        };
-        Dataset<Row> kafkaDF = spark.createDataset(Arrays.asList(dataArray), Encoders.STRING())
-                                            .toDF("valueString").withColumn("key", functions.lit(""));
-        //kafkaDF.foreach((ForeachFunction<Row>) row -> System.out.println(row.schema() + "  " + row.length() + " " + row.prettyJson()));System.exit(0);
-        /* */
-        /* *
-        // For testing with streaming: read from socket
-        Dataset<Row> kafkaDF = spark
-                                .readStream()
-                                .format("org.apache.spark.sql.execution.streaming.TextSocketSourceProvider")
-                                .option("host", "localhost")
-                                .option("port", 9999)
-                                .option("maxOffsetsPerTrigger", batchSize)
-                                .load()
-                                .selectExpr("CAST(value AS STRING) as valueString");
-        /* */
-
-        // Tokenize sensitive fields using Skyflow.
-
-        MapPartitionsFunction<Row,Row> transformer = new MapPartitionsFunction<Row,Row>() {
-            @Override
-            @SuppressWarnings("unchecked")
-            public Iterator<Row> call(Iterator<Row> iterator) throws Exception {
-                int partitionId = TaskContext.getPartitionId();
-                System.out.println("Starting partition with ID: " + partitionId);
-                try (final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000)) {
-                    Map<String, String> dimensionMap = new HashMap<>();
-                    dimensionMap.put("object", clazz.getSimpleName());
-                    ValueDatum numRecords = stats.createOrGetUniqueMetricForName("numRecords", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
-                    ValueDatum numBatches = stats.createOrGetUniqueMetricForName("numBatches", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
-                    StatisticDatum batchSizes = stats.createOrGetUniqueMetricForName("batchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
-                    StatisticDatum apiLatency = stats.createOrGetUniqueMetricForName("apiLatency", dimensionMap, StandardUnit.MILLISECONDS, StatisticDatum.class);
-
-                    List<Row> result = new ArrayList<>();
-                    while (iterator.hasNext()) {
-                        List<String> batch = new ArrayList<>();
-                        for (int i = 0; i < vaultBatchSize && iterator.hasNext(); i++) {
-                            numRecords.increment();
-                            batch.add(iterator.next().getString(0)); // There is only one column in the Row: valueString
-                        }
-                        if (!batch.isEmpty()) {
-                            numBatches.increment();
-                            batchSizes.value(batch.size());
-
-                            // Process the batch
-                            JSONObject[] transformed = getTokenizedObjects(
-                                partitionId,
-                                apiLatency,
-                                batch.toArray(new String[0]),
-                                vault_id,
-                                vault_url,
-                                credentialString,
-                                shortCircuitSkyflow,
-                                clazz
-                            );
-                            for (JSONObject obj : transformed) {
-                                result.add(RowFactory.create(new TreeMap<>(obj).values().toArray()));
-                            }
-                        }
-                        stats.pollAndReport(false);
-                    }
-                    System.out.println("Processed " + result.size() + " items in partition with ID: " + partitionId);
-                    return result.iterator();
-                }
-            }
-        };
-
-        Dataset<Row> transformedDF = kafkaDF.mapPartitions(transformer, Encoders.row(schema));
-
-        // Output
-
-        // Let's do a continuous micro-batch every few seconds
-        StreamingQuery query = transformedDF
-                .writeStream()
-                .option("checkpointLocation", outputBucket + "/checkpoints")
-                .trigger(Trigger.ProcessingTime(microBatchSeconds + " seconds"))
-                //.format("console").option("truncate",false).option("numRows",40)
-                .format("hudi").outputMode("append")
-                .options(hudiOptions)
-                .option("path", hudiTablePath)
-                .start();
-
-        // Wait for termination signal
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                if (query != null && query.isActive()) {
-                    query.stop();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }));
-
-        // Run the pipeline!!
-        query.awaitTermination();
+        return schema;
     }
 
-    private static <T extends SerializableDeserializable> JSONObject[] getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
-        System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
-        try {
-            VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
-            VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
-            return _getTokenizedObjects(partitionId, apiLatency, jsons, vault_id, vault_url, credentialString, shortCircuitSkyflow, objectInfo, clazz);
-        } catch (Exception e) {
-            throw new Exception("NOT-FOR-PRODUCTION: Failed to process: " + String.join(", ", jsons), e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
-        }
-    }
+    private static Map<String, String> getHudiOptions(Class<? extends SerializableDeserializable> clazz, String outputBucket,
+                                      String tableName) {
+        String hudiTableName = tableName;
 
-    @SuppressWarnings("unchecked")
-    private static <T extends SerializableDeserializable> JSONObject[] _getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
-        JSONObject[] resultList = new JSONObject[jsons.length];
-        T[] objArray = (T[]) new SerializableDeserializable[jsons.length];
-        JSONArray recordsArray = new JSONArray();
+        // Configure Hudi Write
+        Map<String, String> hudiOptions = new HashMap<>();
+        hudiOptions.put("hoodie.table.name", hudiTableName);
+        hudiOptions.put("hoodie.datasource.write.operation", "upsert");
+        hudiOptions.put("hoodie.datasource.hive_sync.enable", "false");
+        hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ");
 
-        int i;
-        i=0;
-        for (String json : jsons) {
-            //System.out.println(" ("+ partitionId + ") recv: " + json);
-            T obj = clazz.getConstructor(String.class).newInstance(json);
-            objArray[i] = obj;
-            JSONObject record = new JSONObject();
-            record.put("table", objectInfo.tableName);
+        HudiConfig hudiConfigAnn = clazz.getAnnotation(HudiConfig.class);
+        //hudiOptions.put("hoodie.datasource.write.partitionpath.field", hudiConfigAnn.partitionpathkey_field());
+        hudiOptions.put("hoodie.datasource.write.recordkey.field", hudiConfigAnn.recordkey_field());
+        hudiOptions.put("hoodie.datasource.write.precombine.field", hudiConfigAnn.precombinekey_field());
 
-            JSONObject fields = ReflectionUtils.jsonObjectForVault(obj, objectInfo);
-            record.put("fields", fields);
-            recordsArray.add(record);
-            i = i + 1;
-        }
-
-        // Create a JSON/REST request to "vault_url" for inserting records
-        String insertRecordUrl = vault_url + "/v1/vaults/" + vault_id + "/" + objectInfo.tableName;
-        JSONObject insertReqBody = new JSONObject();
-        insertReqBody.put("records", recordsArray);
-        insertReqBody.put("tokenization", true);
-        insertReqBody.put("upsert", objectInfo.upsertColumnName);
-
-        // Create an HTTP client.
-        // XXX create the client in caller and create and cache a connection. Make a request from the cached connection.
-        CloseableHttpClient client = HttpClientBuilder.create().build();
-
-        // Create an HTTP request
-        ClassicHttpRequest request = ClassicRequestBuilder
-            .post(URI.create(insertRecordUrl))
-            .addHeader("Authorization", "Bearer " + credentialString)
-            .setEntity(insertReqBody.toJSONString(), ContentType.APPLICATION_JSON)
-            .build();
-
-        if (!shortCircuitSkyflow) {
-            long startTime = System.currentTimeMillis();
-            // Send the request and get the response
-            @SuppressWarnings("deprecation") // We NEED the synch call
-            final CloseableHttpResponse response = client.execute(request);
-            if (response.getCode() != 200) {
-                String statusLine = response.getReasonPhrase();
-                response.close();
-                client.close();
-                throw new Exception("http response: " + statusLine);
-            }
-
-            // Parse the response body as JSON
-            JSONParser jsonParser = new JSONParser();
-            String bodyString = null;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()))) {
-                bodyString = reader.lines().collect(Collectors.joining("\n"));
-            } finally {
-                apiLatency.value(System.currentTimeMillis() - startTime);
-                response.close();
-                client.close();
-            }
-
-            JSONObject insertResponse = (JSONObject) jsonParser.parse(bodyString);
-            JSONArray responseRecords = (JSONArray) insertResponse.get("records");
-
-            if (responseRecords.size() != jsons.length) {
-                throw new RuntimeException("Skyflow was asked to upsert " + jsons.length + " records and returned " + responseRecords.size() + " results");
-            }
-            for (i = 0; i < responseRecords.size(); i++) {
-                JSONObject responseRecord = (JSONObject) responseRecords.get(i);
-                JSONObject extractedFields = (JSONObject) responseRecord.get("tokens");
-                String skyflow_id = (String) responseRecord.get("skyflow_id");
-
-                T obj = objArray[i];
-                ReflectionUtils.replaceWithValuesFromVault(obj, extractedFields, objectInfo);
-
-                String objectJson = obj.toJSONString();
-                JSONParser parser = new JSONParser();
-                JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
-                jsonObject.put("skyflow_id", skyflow_id);
-                resultList[i] = jsonObject;
-            }
-        } else {
-            i = 0;
-            for (T obj : objArray) {
-                //System.out.println(" ("+ partitionId + ") sim send: " + obj);
-                String objectJson = obj.toJSONString();
-                JSONParser parser = new JSONParser();
-                JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
-                jsonObject.put("skyflow_id", "skipped");
-                resultList[i] =jsonObject;
-                i = i + 1;
-            }
-        }
-
-        return resultList;
+        return hudiOptions;
     }
 
     private static String getSecret(String region, String secretName) {

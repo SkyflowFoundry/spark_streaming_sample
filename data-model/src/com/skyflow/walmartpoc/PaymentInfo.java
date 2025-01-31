@@ -24,9 +24,9 @@ public class PaymentInfo implements SerializableDeserializable {
     @VaultColumn String cardHolderAddressLine1;
     @VaultColumn String cardHolderAddressLine2;
     @VaultColumn String cardHolderAddressLine3;
-    String cardHolderCity;
-    String cardHolderState;
-    String cardHolderZip;
+    @VaultColumn String cardHolderCity;
+    @VaultColumn String cardHolderState;
+    @VaultColumn String cardHolderZip;
     String cardHolderCountry;
     @VaultColumn String cardHolderEmail;
     @VaultColumn String cardHolderDateOfBirth;

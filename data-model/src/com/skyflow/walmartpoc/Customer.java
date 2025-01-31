@@ -16,7 +16,7 @@ import com.skyflow.iface.VaultObject;
 @VaultObject("customeraccount")
 @HudiConfig(recordkey_field="custID",precombinekey_field="lastupdate_ts")
 public class Customer implements SerializableDeserializable {
-    @VaultColumn(value="customerid",upsertColumn=true, tokenized=false) String custID;
+    @VaultColumn(value="customerid",upsertColumn=true) String custID;
     @VaultColumn String firstName;
     @VaultColumn String lastName;
     @VaultColumn String email;
@@ -25,9 +25,9 @@ public class Customer implements SerializableDeserializable {
     @VaultColumn String addressLine1;
     @VaultColumn String addressLine2;
     @VaultColumn String addressLine3;
-    String city;
-    String state;
-    String zip;
+    @VaultColumn String city;
+    @VaultColumn String state;
+    @VaultColumn String zip;
     String country;
     Long lastupdate_ts;
 

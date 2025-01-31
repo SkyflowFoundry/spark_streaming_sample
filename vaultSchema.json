@@ -563,12 +563,6 @@
               ]
             },
             {
-              "name": "skyflow.options.column_group",
-              "values": [
-                "addressline1"
-              ]
-            },
-            {
               "name": "skyflow.options.configuration_tags",
               "values": [
                 "NULLABLE"
@@ -648,12 +642,6 @@
               ]
             },
             {
-              "name": "skyflow.options.column_group",
-              "values": [
-                "addressline2"
-              ]
-            },
-            {
               "name": "skyflow.options.configuration_tags",
               "values": [
                 "NULLABLE"
@@ -730,12 +718,6 @@
               "name": "skyflow.options.default_token_policy",
               "values": [
                 "NON_DETERMINISTIC_UUID"
-              ]
-            },
-            {
-              "name": "skyflow.options.column_group",
-              "values": [
-                "addressline3"
               ]
             },
             {
@@ -900,7 +882,7 @@
             {
               "name": "skyflow.options.format_preserving_regex",
               "values": [
-                "[0-9]{5}"
+                "[0-9]{5}-[0-9]{4}"
               ]
             },
             {
@@ -1448,12 +1430,6 @@
               ]
             },
             {
-              "name": "skyflow.options.column_group",
-              "values": [
-                "addressline1"
-              ]
-            },
-            {
               "name": "skyflow.options.configuration_tags",
               "values": [
                 "NULLABLE"
@@ -1533,12 +1509,6 @@
               ]
             },
             {
-              "name": "skyflow.options.column_group",
-              "values": [
-                "addressline2"
-              ]
-            },
-            {
               "name": "skyflow.options.configuration_tags",
               "values": [
                 "NULLABLE"
@@ -1615,12 +1585,6 @@
               "name": "skyflow.options.default_token_policy",
               "values": [
                 "NON_DETERMINISTIC_UUID"
-              ]
-            },
-            {
-              "name": "skyflow.options.column_group",
-              "values": [
-                "addressline3"
               ]
             },
             {
@@ -2023,7 +1987,7 @@
             {
               "name": "skyflow.options.format_preserving_regex",
               "values": [
-                "[0-9]{5}"
+                "[0-9]{5}-[0-9]{4}"
               ]
             },
             {

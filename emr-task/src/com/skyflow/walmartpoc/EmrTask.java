@@ -26,10 +26,13 @@ import java.util.stream.Collectors;
 
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.*;
@@ -85,18 +88,18 @@ public class EmrTask {
         }
     }
 
-    private static class BatchProcessor implements MapPartitionsFunction<Row, Row> {
+    private static class BatchProcessor<T extends SerializableDeserializable> implements MapPartitionsFunction<Row, Row> {
         private final String cloudwatchNamespace;
         private final int reportingDelaySecs;
-        private final Class<? extends SerializableDeserializable> clazz;
+        private final Class<T> clazz;
         private final int vaultBatchSize;
         private final String vault_id;
         private final String vault_url;
         private final String credentialString;
         private final boolean shortCircuitSkyflow;
 
-        public BatchProcessor(String cloudwatchNamespace, int reportingDelaySecs, Class<? extends SerializableDeserializable> clazz,
-                              int vaultBatchSize, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow) {
+        public BatchProcessor(String cloudwatchNamespace, int reportingDelaySecs, Class<T> clazz,
+                                int vaultBatchSize, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow) {
             this.cloudwatchNamespace = cloudwatchNamespace;
             this.reportingDelaySecs = reportingDelaySecs;
             this.clazz = clazz;
@@ -111,7 +114,12 @@ public class EmrTask {
         public Iterator<Row> call(Iterator<Row> iterator) throws Exception {
             int partitionId = TaskContext.getPartitionId();
             System.out.println("Starting partition with ID: " + partitionId);
-            try (final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000)) {
+
+            try (PoolingHttpClientConnectionManager connMgr = PoolingHttpClientConnectionManagerBuilder.create().setMaxConnTotal(1).build();
+                 final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000)) {
+
+                HttpClientBuilder connBuilder = HttpClients.custom().setConnectionManager(connMgr);
+
                 Map<String, String> dimensionMap = new HashMap<>();
                 dimensionMap.put("object", clazz.getSimpleName());
                 ValueDatum numRecords = stats.createOrGetUniqueMetricForName("emrRecordsProcessed", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
@@ -125,6 +133,7 @@ public class EmrTask {
                 long kafkaBatchSize=0;
                 List<Row> result = new ArrayList<>();
                 while (iterator.hasNext()) {
+                    CloseableHttpClient client = connBuilder.build();
                     List<String> batch = new ArrayList<>();
                     for (int i = 0; i < vaultBatchSize && iterator.hasNext(); i++) {
                         numRecords.increment();
@@ -140,11 +149,7 @@ public class EmrTask {
                             partitionId,
                             apiLatency,
                             batch.toArray(new String[0]),
-                            vault_id,
-                            vault_url,
-                            credentialString,
-                            shortCircuitSkyflow,
-                            clazz
+                            client
                         );
                         for (JSONObject obj : transformed) {
                             @SuppressWarnings("unchecked")
@@ -160,19 +165,19 @@ public class EmrTask {
             }
         }
 
-        private static <T extends SerializableDeserializable> JSONObject[] getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, Class<T> clazz) throws Exception {
-            System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
-            try {
-                VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
-                VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
-                return _getTokenizedObjects(partitionId, apiLatency, jsons, vault_id, vault_url, credentialString, shortCircuitSkyflow, objectInfo, clazz);
+        private JSONObject[] getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, CloseableHttpClient client) throws Exception {
+                    System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
+                    try {
+                        VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
+                        VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
+                        return _getTokenizedObjects(partitionId, apiLatency, jsons, objectInfo, client);
             } catch (Exception e) {
                 throw new Exception("NOT-FOR-PRODUCTION: Failed to process: " + String.join(", ", jsons), e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
             }
         }
 
         @SuppressWarnings("unchecked")
-        private static <T extends SerializableDeserializable> JSONObject[] _getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow, VaultObjectInfo<T> objectInfo, Class<T> clazz) throws Exception {
+        private JSONObject[] _getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, VaultObjectInfo<T> objectInfo, CloseableHttpClient client) throws Exception {
             JSONObject[] resultList = new JSONObject[jsons.length];
             T[] objArray = (T[]) new SerializableDeserializable[jsons.length];
             JSONArray recordsArray = new JSONArray();
@@ -199,40 +204,34 @@ public class EmrTask {
             insertReqBody.put("tokenization", true);
             insertReqBody.put("upsert", objectInfo.upsertColumnName);
 
-            // Create an HTTP client.
-            // XXX create the client in caller and create and cache a connection. Make a request from the cached connection.
-            CloseableHttpClient client = HttpClientBuilder.create().build();
-
-            // Create an HTTP request
-            ClassicHttpRequest request = ClassicRequestBuilder
-                .post(URI.create(insertRecordUrl))
-                .addHeader("Authorization", "Bearer " + credentialString)
-                .setEntity(insertReqBody.toJSONString(), ContentType.APPLICATION_JSON)
-                .build();
-
             if (!shortCircuitSkyflow) {
                 long startTime = System.currentTimeMillis();
-                // Send the request and get the response
-                @SuppressWarnings("deprecation") // We NEED the synch call
-                final CloseableHttpResponse response = client.execute(request);
-                if (response.getCode() != 200) {
-                    String statusLine = response.getReasonPhrase();
-                    response.close();
-                    client.close();
-                    throw new Exception("http response: " + statusLine);
-                }
 
-                // Parse the response body as JSON
-                JSONParser jsonParser = new JSONParser();
                 String bodyString = null;
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()))) {
-                    bodyString = reader.lines().collect(Collectors.joining("\n"));
-                } finally {
-                    apiLatency.value(System.currentTimeMillis() - startTime);
-                    response.close();
-                    client.close();
+                // Create an HTTP request
+                ClassicHttpRequest request = ClassicRequestBuilder
+                    .post(URI.create(insertRecordUrl))
+                    .addHeader("Authorization", "Bearer " + credentialString)
+                    .setEntity(insertReqBody.toJSONString(), ContentType.APPLICATION_JSON)
+                    .build();
+
+                // Send the request and get the response
+                // We NEED the synch call
+                try (@SuppressWarnings("deprecation") CloseableHttpResponse response = client.execute(request);) {
+                    if (response.getCode() != 200) {
+                        String statusLine = response.getReasonPhrase();
+                        throw new Exception("http response: " + statusLine);
+                    }
+
+                    // Parse the response body as JSON
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()))) {
+                        bodyString = reader.lines().collect(Collectors.joining("\n"));
+                    } finally {
+                        apiLatency.value(System.currentTimeMillis() - startTime);
+                    }
                 }
 
+                JSONParser jsonParser = new JSONParser();
                 JSONObject insertResponse = (JSONObject) jsonParser.parse(bodyString);
                 JSONArray responseRecords = (JSONArray) insertResponse.get("records");
 
@@ -412,7 +411,7 @@ public class EmrTask {
 
         // Tokenize sensitive fields using Skyflow.
 
-        MapPartitionsFunction<Row, Row> transformer = new BatchProcessor(
+        MapPartitionsFunction<Row, Row> transformer = new BatchProcessor<>(
             cloudwatchNamespace,
             reportingDelaySecs,
             clazz,

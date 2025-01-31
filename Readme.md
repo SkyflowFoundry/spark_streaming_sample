@@ -79,6 +79,7 @@ export SPARK_WORKER_OPTS="-Dspark.worker.cleanup.enabled=true -Dspark.worker.cle
 You must have the following setup:
 ```bash
 export SPARK_LOCAL_IP=localhost
+export JAVA_HOME=<...>
 ```
 
 Now, we running Spark job
@@ -98,7 +99,7 @@ spark-submit \
       "(console)" 10
 ```
 
-To understand the above there are arguments that spark consumes (read `spark-submit` tutorial / help). The arguments after `emr-task-<version>.jar` go straight to the EmrTask which will print usage if you run it without arguments. For your convenience, here is the current usage:
+To understand the above there are arguments that spark consumes (read `spark-submit` tutorial / help). The arguments after `emr-task-<version>.jar` go straight to the EmrTask which will print usage if you run it without arguments. For the above call, here are the arguments, in order:
 ### Pipeline Configuration
 - `<localIO>`: Boolean flag for local input/output
 - `<full.java.class>`: Fully qualified Java class name for processing

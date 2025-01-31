@@ -39,6 +39,64 @@
             "ID": ""
           },
           {
+            "name": "customerid",
+            "datatype": "DT_STRING",
+            "isArray": false,
+            "tags": [
+              {
+                "name": "skyflow.options.default_dlp_policy",
+                "values": [
+                  "PLAIN_TEXT"
+                ]
+              },
+              {
+                "name": "skyflow.options.operation",
+                "values": [
+                  "ALL_OP"
+                ]
+              },
+              {
+                "name": "skyflow.options.default_token_policy",
+                "values": [
+                  "DETERMINISTIC_UUID"
+                ]
+              },
+              {
+                "name": "skyflow.options.unique",
+                "values": [
+                  "true"
+                ]
+              },
+              {
+                "name": "skyflow.options.index",
+                "values": [
+                  "true"
+                ]
+              },
+              {
+                "name": "skyflow.options.not_null",
+                "values": [
+                  "true"
+                ]
+              },
+              {
+                "name": "skyflow.options.description",
+                "values": [
+                  "customer id from walmart. uuid. unique. used for upserts"
+                ]
+              },
+              {
+                "name": "skyflow.options.display_name",
+                "values": [
+                  "customerid"
+                ]
+              }
+            ],
+            "properties": null,
+            "index": 0,
+            "ID": ""
+          },
+          {
             "name": "firstname",
             "datatype": "DT_STRING",
             "isArray": false,
@@ -70,7 +128,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -149,7 +207,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -228,7 +286,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -313,7 +371,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -380,7 +438,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -459,7 +517,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -538,7 +596,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -617,7 +675,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -657,58 +715,6 @@
                 "name": "skyflow.options.display_name",
                 "values": [
                   "addressline3"
-                ]
-              }
-            ],
-            "properties": null,
-            "index": 0,
-            "ID": ""
-          },
-          {
-            "name": "customerid",
-            "datatype": "DT_STRING",
-            "isArray": false,
-            "tags": [
-              {
-                "name": "skyflow.options.default_dlp_policy",
-                "values": [
-                  "PLAIN_TEXT"
-                ]
-              },
-              {
-                "name": "skyflow.options.operation",
-                "values": [
-                  "ALL_OP"
-                ]
-              },
-              {
-                "name": "skyflow.options.unique",
-                "values": [
-                  "true"
-                ]
-              },
-              {
-                "name": "skyflow.options.index",
-                "values": [
-                  "true"
-                ]
-              },
-              {
-                "name": "skyflow.options.not_null",
-                "values": [
-                  "true"
-                ]
-              },
-              {
-                "name": "skyflow.options.description",
-                "values": [
-                  "customer id from walmart. uuid. unique. used for upserts"
-                ]
-              },
-              {
-                "name": "skyflow.options.display_name",
-                "values": [
-                  "customerid"
                 ]
               }
             ],
@@ -808,7 +814,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -894,7 +900,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -973,7 +979,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -1052,7 +1058,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -1131,7 +1137,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -1210,7 +1216,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -1289,7 +1295,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -1368,7 +1374,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -1441,7 +1447,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {
@@ -1560,7 +1566,7 @@
               {
                 "name": "skyflow.options.operation",
                 "values": [
-                  "EXACT_MATCH"
+                  "ALL_OP"
                 ]
               },
               {

@@ -5,18 +5,34 @@ import com.github.javafaker.Faker;
 public class Catalog implements SerializableDeserializable {
     String sku_id;
     String category;
-    boolean MHMD_flag;
+    String MHMD_flag;
 
     Catalog(Faker faker) {
         this.sku_id = faker.internet().uuid();
-        this.category = faker.options().option("catA", "catB", "catC");
-        this.MHMD_flag = faker.bool().bool();
+        this.category = "category-" + faker.internet().uuid();
+        this.MHMD_flag = faker.bool().bool() ? "yes" : "no";
+    }
+
+    Catalog(String jsonString) {
+        try {
+            org.json.simple.parser.JSONParser parser = new org.json.simple.parser.JSONParser();
+            org.json.simple.JSONObject jsonObject = (org.json.simple.JSONObject) parser.parse(jsonString);
+
+            this.sku_id = (String) jsonObject.get("sku_id");
+            this.category = (String) jsonObject.get("category");
+            this.MHMD_flag = (String) jsonObject.get("MHMD_flag");
+        } catch (org.json.simple.parser.ParseException e) {
+            throw new IllegalArgumentException("Invalid JSON string", e);
+        }
     }
 
     @Override
     public String toJSONString() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'toJSONString'");
+        return "{" +
+                "\"sku_id\":\"" + sku_id + "\"," +
+                "\"category\":\"" + category + "\"," +
+                "\"MHMD_flag\":\"" + MHMD_flag + "\"" +
+                "}";
     }
 
     private static final String CSV_HEADER[] = new String[]{"sku_id","category","MHMD_flag"};
@@ -25,7 +41,7 @@ public class Catalog implements SerializableDeserializable {
         String[] catalogData = {
             sku_id, 
             category, 
-            MHMD_flag ? "yes" : "no"
+            MHMD_flag
         };
         return catalogData;
     }

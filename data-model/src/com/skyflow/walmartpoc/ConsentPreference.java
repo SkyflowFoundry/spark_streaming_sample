@@ -33,10 +33,34 @@ public class ConsentPreference implements SerializableDeserializable {
         this.domain = faker.options().option("Walmart US", "ACC");
     }
 
+    public ConsentPreference(String jsonString) {
+        try {
+            org.json.simple.parser.JSONParser parser = new org.json.simple.parser.JSONParser();
+            org.json.simple.JSONObject jsonObject = (org.json.simple.JSONObject) parser.parse(jsonString);
+
+            this.startIDType = (String) jsonObject.get("startIDType");
+            this.startIDValue = (String) jsonObject.get("startIDValue");
+            this.idType = (String) jsonObject.get("idType");
+            this.idValue = (String) jsonObject.get("idValue");
+            this.consentOptOut = (Boolean) jsonObject.get("consentOptOut");
+            this.purpose = (String) jsonObject.get("purpose");
+            this.domain = (String) jsonObject.get("domain");
+        } catch (org.json.simple.parser.ParseException e) {
+            throw new IllegalArgumentException("Invalid JSON string", e);
+        }
+    }
+
     @Override
     public String toJSONString() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'toJSONString'");
+        return "{" +
+                "\"startIDType\":\"" + startIDType + "\"," +
+                "\"startIDValue\":\"" + startIDValue + "\"," +
+                "\"idType\":\"" + idType + "\"," +
+                "\"idValue\":\"" + idValue + "\"," +
+                "\"consentOptOut\":" + consentOptOut + "," +
+                "\"purpose\":\"" + purpose + "\"," +
+                "\"domain\":\"" + domain + "\"" +
+                "}";
     }
 
     private static final String CSV_HEADER[] = new String[]{

@@ -84,7 +84,6 @@ public class GenSeedData {
         float two_card_fraction = config.fake_data.two_card_fraction;
         float zeroTxnProb = config.fake_data.zero_txn_fraction;
         float twoTxnProb = config.fake_data.two_txn_fraction;
-        float randomValue = random.nextFloat();
 
         try (CollectorAndReporter stats = new CollectorAndReporter(namespace, reportingDelaySecs*1000);
              CsvWriter<Customer> customerWriter = new CsvWriter<>(Paths.get(outputDir, config.seed_data.customers_file), Customer.getCsvHeader());
@@ -127,6 +126,7 @@ public class GenSeedData {
                             logger.info("Wrote PaymentInfo: {}",paymentInfo);
                         }
 
+                        float randomValue = random.nextFloat();
                         int transactionCount;
                         if (randomValue < zeroTxnProb) {
                             transactionCount = 0;

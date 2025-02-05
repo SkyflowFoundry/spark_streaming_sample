@@ -19,7 +19,7 @@ public class ReflectionUtils {
 
     public static <T> VaultObjectInfo<T> getVaultObjectInfo(Class<T> objectClass) {
         if (!objectClass.isAnnotationPresent(VaultObject.class)) {
-            throw new IllegalArgumentException("The class " + objectClass.getName() + " must be annotated with @VaultObject.");
+            return null;
         }
 
         VaultObjectInfo<T> objectInfo = new VaultObjectInfo<T>();

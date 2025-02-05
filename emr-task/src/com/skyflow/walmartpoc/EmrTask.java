@@ -16,6 +16,7 @@ import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -166,11 +167,11 @@ public class EmrTask {
         }
 
         private JSONObject[] getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, CloseableHttpClient client) throws Exception {
-                    System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
-                    try {
-                        VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
-                        VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
-                        return _getTokenizedObjects(partitionId, apiLatency, jsons, objectInfo, client);
+            System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
+            try {
+                VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
+                VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
+                return _getTokenizedObjects(partitionId, apiLatency, jsons, objectInfo, client);
             } catch (Exception e) {
                 throw new Exception("NOT-FOR-PRODUCTION: Failed to process: " + String.join(", ", jsons), e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
             }
@@ -179,33 +180,33 @@ public class EmrTask {
         @SuppressWarnings("unchecked")
         private JSONObject[] _getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, VaultObjectInfo<T> objectInfo, CloseableHttpClient client) throws Exception {
             JSONObject[] resultList = new JSONObject[jsons.length];
-            T[] objArray = (T[]) new SerializableDeserializable[jsons.length];
-            JSONArray recordsArray = new JSONArray();
-
-            int i;
-            i=0;
-            for (String json : jsons) {
-                //System.out.println(" ("+ partitionId + ") recv: " + json);
-                T obj = clazz.getConstructor(String.class).newInstance(json);
-                objArray[i] = obj;
-                JSONObject record = new JSONObject();
-                record.put("table", objectInfo.tableName);
-
-                JSONObject fields = ReflectionUtils.jsonObjectForVault(obj, objectInfo);
-                record.put("fields", fields);
-                recordsArray.add(record);
-                i = i + 1;
-            }
-
-            // Create a JSON/REST request to "vault_url" for inserting records
-            String insertRecordUrl = vault_url + "/v1/vaults/" + vault_id + "/" + objectInfo.tableName;
-            JSONObject insertReqBody = new JSONObject();
-            insertReqBody.put("records", recordsArray);
-            insertReqBody.put("tokenization", true);
-            insertReqBody.put("upsert", objectInfo.upsertColumnName);
-
             if (!shortCircuitSkyflow) {
-                long startTime = System.currentTimeMillis();
+                T[] objArray = (T[]) new SerializableDeserializable[jsons.length];
+
+                JSONArray recordsArray = new JSONArray();
+
+                int i;
+                i=0;
+                for (String json : jsons) {
+                    //System.out.println(" ("+ partitionId + ") recv: " + json);
+                    T obj = clazz.getConstructor(String.class).newInstance(json);
+                    objArray[i] = obj;
+                    JSONObject record = new JSONObject();
+                    record.put("table", objectInfo.tableName);
+    
+                    JSONObject fields = ReflectionUtils.jsonObjectForVault(obj, objectInfo);
+                    record.put("fields", fields);
+                    recordsArray.add(record);
+                    i = i + 1;
+                }
+    
+                // Create a JSON/REST request to "vault_url" for inserting records
+                String insertRecordUrl = vault_url + "/v1/vaults/" + vault_id + "/" + objectInfo.tableName;
+                JSONObject insertReqBody = new JSONObject();
+                insertReqBody.put("records", recordsArray);
+                insertReqBody.put("tokenization", true);
+                insertReqBody.put("upsert", objectInfo.upsertColumnName);
+                    long startTime = System.currentTimeMillis();
 
                 String bodyString = null;
                 // Create an HTTP request
@@ -253,9 +254,11 @@ public class EmrTask {
                     resultList[i] = jsonObject;
                 }
             } else {
-                i = 0;
-                for (T obj : objArray) {
-                    //System.out.println(" ("+ partitionId + ") sim send: " + obj);
+                int i = 0;
+                i=0;
+                for (String json : jsons) {
+                    //System.out.println(" ("+ partitionId + ") recv: " + json);
+                    T obj = clazz.getConstructor(String.class).newInstance(json);
                     String objectJson = obj.toJSONString();
                     JSONParser parser = new JSONParser();
                     JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
@@ -275,14 +278,14 @@ public class EmrTask {
         if (args.length < 16) {
             System.err.println("Usage: EmrTask <localIO> <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <kafka-batch-size> <batch-delay-secs> <aws-region> <secret-name> <vault-id> <vault-url> <vault-batch-size> <short-circuit-skyflow?> <namespace> <reporting-delay-secs>");
             System.err.println("Pipeline Type:");
-            System.err.println("  <localIO>               : A boolean flag to determine if input comes from plaintext kafka and output to the console.");
+            System.err.println("  <localIO>               : A boolean flag to determine if input comes from plaintext kafka. Spark runs locally.");
             System.err.println("  <full.java.class>       : The fully qualified Java class name of the object being processed");
             System.err.println("Output Instructions:");
             System.err.println("  <output-s3-bucket>      : The S3 bucket where the output will be stored.");
             System.err.println("  <table-name>            : The name of the table to be used in the process.");
             System.err.println("Input Instructions:");
             System.err.println("  <kafka-bootstrap>       : The Kafka bootstrap server address.");
-            System.err.println("  <kafka-topic>           : The Kafka topic to subscribe to.");
+            System.err.println("  <kafka-topic-base>      : The base name of the Kafka topic to subscribe to. (topic = basename-Class)");
             System.err.println("  <kafka-batch-size>      : The size of each batch to be processed.");
             System.err.println("  <batch-delay-secs>      : The microbatch size in seconds");
             System.err.println("Vault Instructions:");
@@ -304,7 +307,7 @@ public class EmrTask {
         String outputBucket = args[2];
         String tableName = args[3];
         String kafkaBootstrap = args[4];
-        String kafkaTopic = args[5];
+        String kafkaTopic = String.format("%s-%s",args[5],clazz.getSimpleName());
         int kafkaBatchSize = Integer.parseInt(args[6]);
         int microBatchSeconds = Integer.parseInt(args[7]);
         String awsRegion = args[8];
@@ -391,17 +394,11 @@ public class EmrTask {
             .option("checkpointLocation", outputBucket + "/checkpoints")
             .trigger(Trigger.ProcessingTime(microBatchSeconds + " seconds"))
         ;
-        if(localIO) {
-            streamWriter = streamWriter
-                .format("console").option("truncate",false).option("numRows",40)
-            ;
-        } else {
-            streamWriter = streamWriter
-                .format("hudi").outputMode("append")
-                .options(hudiOptions)
-                .option("path", hudiTablePath)
-            ;
-        }
+        streamWriter = streamWriter
+            .format("hudi").outputMode("append")
+            .options(hudiOptions)
+            .option("path", hudiTablePath)
+        ;
         final StreamingQuery query = streamWriter.start();
 
         // Wait for termination signal
@@ -437,6 +434,8 @@ public class EmrTask {
                     dataType = DataTypes.FloatType;
                 } else if (field.getType().equals(boolean.class) || field.getType().equals(Boolean.class)) {
                     dataType = DataTypes.BooleanType;
+                } else if (field.getType().equals(Date.class)) {
+                    dataType = DataTypes.TimestampType;
                 } else {
                     dataType = DataTypes.StringType; // catch-all!
                 }
@@ -513,6 +512,9 @@ public class EmrTask {
         hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ");
 
         HudiConfig hudiConfigAnn = clazz.getAnnotation(HudiConfig.class);
+        if (hudiConfigAnn == null) {
+            throw new RuntimeException("HudiConfig annotation is missing on the class: " + clazz.getName());
+        }
         //hudiOptions.put("hoodie.datasource.write.partitionpath.field", hudiConfigAnn.partitionpathkey_field());
         hudiOptions.put("hoodie.datasource.write.recordkey.field", hudiConfigAnn.recordkey_field());
         hudiOptions.put("hoodie.datasource.write.precombine.field", hudiConfigAnn.precombinekey_field());

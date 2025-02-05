@@ -70,7 +70,7 @@
             {
               "name": "skyflow.options.index",
               "values": [
-                "true"
+                "false"
               ]
             },
             {
@@ -1015,7 +1015,7 @@
             {
               "name": "skyflow.options.index",
               "values": [
-                "true"
+                "false"
               ]
             },
             {
@@ -2033,6 +2033,60 @@
           "properties": null,
           "index": 0,
           "ID": ""
+        },
+        {
+          "name": "cardexpiration",
+          "datatype": "DT_STRING",
+          "isArray": false,
+          "tags": [
+            {
+              "name": "skyflow.options.default_dlp_policy",
+              "values": [
+                "PLAIN_TEXT"
+              ]
+            },
+            {
+              "name": "skyflow.options.identifiability",
+              "values": [
+                "MODERATE_IDENTIFIABILITY"
+              ]
+            },
+            {
+              "name": "skyflow.options.operation",
+              "values": [
+                "ALL_OP"
+              ]
+            },
+            {
+              "name": "skyflow.options.default_token_policy",
+              "values": [
+                "NON_DETERMINISTIC_UUID"
+              ]
+            },
+            {
+              "name": "skyflow.options.personal_information_type",
+              "values": [
+                "PII",
+                "PCI",
+                "PHI"
+              ]
+            },
+            {
+              "name": "skyflow.options.description",
+              "values": [
+                "The expiration date for a particular credit or debit card"
+              ]
+            },
+            {
+              "name": "skyflow.options.display_name",
+              "values": [
+                "cardexpiration"
+              ]
+            }
+          ],
+          "properties": null,
+          "index": 0,
+          "ID": ""
         }
       ],
       "childrenSchemas": [],
@@ -2055,6 +2109,113 @@
         "description": "",
         "references": ""
       }
+    },
+    {
+      "name": "transaction",
+      "parentSchemaProperties": null,
+      "fields": [
+        {
+          "name": "skyflow_id",
+          "datatype": "DT_STRING",
+          "isArray": false,
+          "tags": [
+            {
+              "name": "skyflow.options.default_dlp_policy",
+              "values": [
+                "PLAIN_TEXT"
+              ]
+            },
+            {
+              "name": "skyflow.options.operation",
+              "values": [
+                "ALL_OP"
+              ]
+            },
+            {
+              "name": "skyflow.options.sensitivity",
+              "values": [
+                "LOW"
+              ]
+            },
+            {
+              "name": "skyflow.options.data_type",
+              "values": [
+                "skyflow.SkyflowID"
+              ]
+            },
+            {
+              "name": "skyflow.options.description",
+              "values": [
+                "Skyflow defined Primary Key"
+              ]
+            },
+            {
+              "name": "skyflow.options.display_name",
+              "values": [
+                "Skyflow ID"
+              ]
+            }
+          ],
+          "properties": null,
+          "index": 0,
+          "ID": ""
+        },
+        {
+          "name": "customerid",
+          "datatype": "DT_STRING",
+          "isArray": false,
+          "tags": [
+            {
+              "name": "skyflow.options.default_dlp_policy",
+              "values": [
+                "PLAIN_TEXT"
+              ]
+            },
+            {
+              "name": "skyflow.options.operation",
+              "values": [
+                "ALL_OP"
+              ]
+            },
+            {
+              "name": "skyflow.options.default_token_policy",
+              "values": [
+                "DETERMINISTIC_UUID"
+              ]
+            },
+            {
+              "name": "skyflow.options.not_null",
+              "values": [
+                "true"
+              ]
+            },
+            {
+              "name": "skyflow.options.column_group",
+              "values": [
+                "customerid"
+              ]
+            },
+            {
+              "name": "skyflow.options.description",
+              "values": [
+                "String"
+              ]
+            },
+            {
+              "name": "skyflow.options.display_name",
+              "values": [
+                "customerid"
+              ]
+            }
+          ],
+          "properties": null,
+          "index": 0,
+          "ID": ""
+        }
+      ],
+      "childrenSchemas": [],
+      "schemaTags": [],
+      "properties": null
     }
   ],
   "tags": []

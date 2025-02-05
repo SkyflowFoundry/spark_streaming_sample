@@ -1,24 +1,20 @@
 package com.skyflow.walmartpoc;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.github.javafaker.Faker;
-import com.google.common.util.concurrent.RateLimiter;
-
-import software.amazon.awssdk.services.cloudwatch.model.StandardUnit;
 
 
-public class KafkaCustomerPublisher implements AutoCloseable {
+public class KafkaCustomerPublisher {
     private static final Logger logger = LoggerFactory.getLogger(KafkaCustomerPublisher.class);
 
     final KafkaProducer<String, String> producer;
@@ -51,65 +47,17 @@ public class KafkaCustomerPublisher implements AutoCloseable {
         producer = new KafkaProducer<>(props);
     }
 
-    @Override
-    public void close() {
-        if (producer != null) {
-            producer.close();
-        }
-    }
-
-    public void send(Customer customer, Callback callback) throws IOException {
-        ProducerRecord<String, String> record = new ProducerRecord<>(topic, customer.toJSONString());
-        producer.send(record, callback);
-    }
-
-    public void produce_batch_at_rate(long numRecs, double numPerSecond) throws IOException {
-        ValueDatum numRecords = stats.createOrGetUniqueMetricForName("numRecordsPublished", null, StandardUnit.COUNT, ValueDatum.class);
-        ValueDatum numErrors = stats.createOrGetUniqueMetricForName("numPublishErrors", null, StandardUnit.COUNT, ValueDatum.class);
-
-        RateLimiter throttler = RateLimiter.create(numPerSecond);
-
-        long startTime = System.currentTimeMillis();
-        long lastWarningTime = startTime; // ignore rates for the first few seconds
-        for (long i = 0; i < numRecs; i++) {
-            throttler.acquire();
-
-            Customer customer = new Customer(faker, czcs);
-            //logger.debug("sending message...");
-            send(customer, (metadata, exception) -> {
-                if (exception != null) {
-                    numErrors.increment();
-                    logger.error("Message sending failed: {}", exception.getMessage(), exception);
-                } else {
-                    numRecords.increment();
-                    logger.debug("Message sent successfully to topic {} partition {} with offset {}", metadata.topic(), metadata.partition(), metadata.offset());
-                }
-                stats.pollAndReport(false);
-            });
-
-            // Check if we are falling behind the desired rate limit.
-            // Do not check if we just printed a warning less than 30s ago. Also ignore if we are within the first 1000 records.
-            long currentTime = System.currentTimeMillis();
-            if (currentTime - lastWarningTime >= 30000 && i>=1000) {
-                long elapsedTime = currentTime - startTime;
-                double expectedTime = (i + 1) / numPerSecond * 1000;
-                if (elapsedTime > expectedTime * 1.1) {
-                    logger.warn("Falling more than 10% behind the desired rate limit. Num: {}. Desired rate: {} records/sec, Current rate: {} records/sec", i, numPerSecond, (i + 1) / (elapsedTime / 1000.0));
-                    lastWarningTime = currentTime;
-                }
-            }
-        }
-    }
-
     public static void main(String[] args) throws Exception {
-        if (args.length < 5) {
-            System.err.println("Usage: " + KafkaCustomerPublisher.class.getName() + " <load-shape> <kafka-bootstrap> <kafka-topic> <namespace> <reporting-delay-secs>");
+        if (args.length < 6) {
+            System.err.println("Usage: " + KafkaCustomerPublisher.class.getName() + " <load-shape> <kafka-bootstrap> <kafka-topic> <kafka-partitions> <namespace> <reporting-delay-secs>");
             System.err.println("Generation Instructions:");
             System.err.println("  <load-shape>            : Semicolon separated list of rate,mins pairs: ");
             System.err.println("                              generate 'rate' (double) records for 'mins' (int) minutes");
             System.err.println("Output Instructions:");
             System.err.println("  <kafka-bootstrap>       : The Kafka bootstrap server address.");
             System.err.println("  <kafka-topic>           : The Kafka topic to subscribe to.");
+            System.err.println("  <kafka-partitions>      : Comma separated partition numbers to round-robin to.");
+            System.err.println("                              Can be empty string, meaning all partitions");
             System.err.println("Metrics Instructions:");
             System.err.println("  <namespace>             : The Cloudwatch namespace for the metrics. Empty for no Cloudwatch reporting");
             System.err.println("  <reporting-delay-secs>  : The delay in seconds for reporting metrics.");
@@ -119,12 +67,27 @@ public class KafkaCustomerPublisher implements AutoCloseable {
         String loadShape = args[0];
         String brokerServer = args[1];
         String topicName = args[2];
-        String cloudwatchNamespace = args[3];
-        int reportingDelaySecs = Integer.parseInt(args[4]);
-        if (!loadShape.matches("^(\\d+(\\.\\d+)?,\\d+;)*(\\d+(\\.\\d+)?,\\d+)$")) {
-            System.err.println("Invalid load shape format. Expected format: 'rate,mins;rate,mins;...'");
-            System.exit(1);
+        int[] kafkaPartitions = null;
+        if (!args[3].isEmpty()) {
+            String[] partitionStrings = args[3].split(",");
+            List<Integer> partitionList = new ArrayList<>();
+            for (String partitionString : partitionStrings) {
+                partitionString = partitionString.trim();
+                if (partitionString.contains("-")) {
+                    String[] range = partitionString.split("-");
+                    int start = Integer.parseInt(range[0].trim());
+                    int end = Integer.parseInt(range[1].trim());
+                    for (int j = start; j <= end; j++) {
+                        partitionList.add(j);
+                    }
+                } else {
+                    partitionList.add(Integer.parseInt(partitionString));
+                }
+            }
+            kafkaPartitions = partitionList.stream().mapToInt(Integer::intValue).toArray();
         }
+        String cloudwatchNamespace = args[4];
+        int reportingDelaySecs = Integer.parseInt(args[5]);
 
         System.setProperty("org.slf4j.simpleLogger.showDateTime", "true");
         System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "yyyy-MM-dd HH:mm:ss");
@@ -137,28 +100,20 @@ public class KafkaCustomerPublisher implements AutoCloseable {
         List<CountryZipCityState> czcs = CountryZipCityState.loadData("US.tsv");
         Faker faker = new Faker();
 
-        long totalRecs = 0;
-        try (final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000);
-             final KafkaCustomerPublisher producer = new KafkaCustomerPublisher(brokerServer, topicName, faker, czcs, stats);) {
-            String[] loadShapeParts = loadShape.split(";");
-            for (String part : loadShapeParts) {
-                String[] rateAndMins = part.split(",");
-                if (rateAndMins.length != 2) {
-                    logger.error("Invalid load shape format: " + part);
-                    continue;
-                }
-                try {
-                    double rate = Double.parseDouble(rateAndMins[0].trim());
-                    int mins = Integer.parseInt(rateAndMins[1].trim());
-                    long numRecs = (long)(rate*mins*60);
-                    logger.info("Generating {} records at {} per second for {} minutes.", numRecs, rate, mins);
-                    producer.produce_batch_at_rate(numRecs,rate);
-                    totalRecs += numRecs;
-                } catch (NumberFormatException e) {
-                    logger.error("Invalid number format in load shape: " + part, e);
-                }
-            }
+        try (CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000);
+                KafkaPublisher<Customer> customerPublisher = new KafkaPublisher<>(Customer.class, false, brokerServer, topicName, kafkaPartitions, stats);) {
+            long totalItems = LoadRunner.run(loadShape, new Runnable() {
+                @Override
+                public void run() {
+                    Customer customer = new Customer(faker, czcs);
+                    try {
+                        customerPublisher.publish(customer);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }                
+            });
+            logger.info("Created {} Customers",totalItems);
         }
-        logger.info("Done. Generated {} records in all.", totalRecs);
     }
 }

@@ -16,7 +16,7 @@ public class PaymentInfo implements SerializableDeserializable {
     @VaultColumn(upsertColumn=true) String paymentID;
     String custID;
     @VaultColumn String creditCardNumber;
-    String cardExpiry; // Should be vaulted!!!
+    @VaultColumn("cardexpiration") String cardExpiry;
     @VaultColumn("card_cvv") String cardCVV;
     @VaultColumn String cardHolderFirstName;
     @VaultColumn String cardHolderLastName;
@@ -154,7 +154,7 @@ public class PaymentInfo implements SerializableDeserializable {
                 "\"cardHolderZip\":\"" + cardHolderZip + "\"," +
                 "\"cardHolderCountry\":\"" + cardHolderCountry + "\"," +
                 "\"cardHolderEmail\":\"" + cardHolderEmail + "\"," +
-                "\"cardHolderDateOfBirth\":\"" + cardHolderDateOfBirth + "\"" +
+                "\"cardHolderDateOfBirth\":\"" + cardHolderDateOfBirth + "\"," +
                 "\"lastupdate_ts\":" + lastupdate_ts + "" +
                 "}";
         }
@@ -177,7 +177,7 @@ public class PaymentInfo implements SerializableDeserializable {
             return paymentData;
         }
 
-        static PaymentInfo fromCsvRecord(String[] csvRecord) {
+        public static PaymentInfo fromCsvRecord(String[] csvRecord) {
             return new PaymentInfo(csvRecord);
         }
 

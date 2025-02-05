@@ -1,25 +1,44 @@
 package com.skyflow.walmartpoc;
 
-import java.util.Date;
-
 import com.github.javafaker.Faker;
+import com.skyflow.iface.VaultColumn;
+import com.skyflow.iface.VaultObject;
 
-@HudiConfig(recordkey_field="orderID",precombinekey_field="orderDate")
+@HudiConfig(recordkey_field="orderID",precombinekey_field="lastupdate_ts")
+@VaultObject("transaction")
 public class Transaction implements SerializableDeserializable {
-    String customerID;
+    @VaultColumn String customerID;
     String orderID;
     String orderItemID;
     String sku_id;
-    Date orderDate;
+    String orderDate;
     String MHMD_flag;
+    Long lastupdate_ts;
 
     Transaction(Customer customer, Catalog item, Faker faker) {
         this.customerID = customer.custID;
         this.sku_id = item.sku_id;
         this.orderID = faker.internet().uuid();
         this.orderItemID = faker.internet().uuid();
-        this.orderDate = faker.date().past(365, java.util.concurrent.TimeUnit.DAYS);
+        this.orderDate = faker.date().past(365, java.util.concurrent.TimeUnit.DAYS).toString();
         this.MHMD_flag = faker.bool().bool() ? "yes" : "no";
+
+        this.lastupdate_ts = System.currentTimeMillis();
+    }
+
+    Transaction(String[] csvRecord) {
+        if (csvRecord.length != 6) {
+            throw new IllegalArgumentException("CSV record must have exactly 6 fields.");
+        }
+        this.customerID = csvRecord[0];
+        this.orderID = csvRecord[1];
+        this.orderItemID = csvRecord[2];
+        this.sku_id = csvRecord[3];
+        this.orderDate = csvRecord[4];
+        this.MHMD_flag = csvRecord[5];
+
+        // We don't read lastupdate_ts ourselves. If we do write this object
+        // somewhere, like a Kafka stream, we are suppoed to update lastupdate_ts
     }
 
     public Transaction(String jsonString) {
@@ -31,11 +50,25 @@ public class Transaction implements SerializableDeserializable {
             this.orderID = (String) jsonObject.get("orderID");
             this.orderItemID = (String) jsonObject.get("orderItemID");
             this.sku_id = (String) jsonObject.get("sku_id");
-            this.orderDate = new Date((Long) jsonObject.get("orderDate"));
+            this.orderDate = (String) jsonObject.get("orderDate");
             this.MHMD_flag = (String) jsonObject.get("MHMD_flag");
+            this.lastupdate_ts = (Long) jsonObject.get("lastupdate_ts");
         } catch (org.json.simple.parser.ParseException e) {
             throw new IllegalArgumentException("Invalid JSON string", e);
         }
+    }
+
+    @Override
+    public String toString() {
+        return "Transaction{" +
+                "customerID='" + customerID + '\'' +
+                ", orderID='" + orderID + '\'' +
+                ", orderItemID='" + orderItemID + '\'' +
+                ", sku_id='" + sku_id + '\'' +
+                ", orderDate=" + orderDate +
+                ", MHMD_flag='" + MHMD_flag + '\'' +
+                ", lastupdate_ts=" + lastupdate_ts +
+                '}';
     }
 
     @Override
@@ -45,8 +78,9 @@ public class Transaction implements SerializableDeserializable {
                 "\"orderID\":\"" + orderID + "\"," +
                 "\"orderItemID\":\"" + orderItemID + "\"," +
                 "\"sku_id\":\"" + sku_id + "\"," +
-                "\"orderDate\":" + orderDate.getTime() + "," +
-                "\"MHMD_flag\":\"" + MHMD_flag + "\"" +
+                "\"orderDate\":\"" + orderDate + "\"," +
+                "\"MHMD_flag\":\"" + MHMD_flag + "\"," +
+                "\"lastupdate_ts\":" + lastupdate_ts + "" +
                 "}";
     }
 
@@ -59,14 +93,14 @@ public class Transaction implements SerializableDeserializable {
             orderID,
             orderItemID,
             sku_id,
-            orderDate.toInstant().toString(),
+            orderDate,
             MHMD_flag
         };
         return transactionData;
     }
     
-    static Transaction fromCsvRecord(String[] csvRecord) {
-        throw new UnsupportedOperationException("not implemented");
+    public static Transaction fromCsvRecord(String[] csvRecord) {
+        return new Transaction(csvRecord);
     }
 
     static String[] getCsvHeader() {

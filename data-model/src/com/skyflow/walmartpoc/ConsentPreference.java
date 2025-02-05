@@ -8,6 +8,7 @@ import java.util.Random;
 
 import com.github.javafaker.Faker;
 
+@HudiConfig(recordkey_field="startIDValue",precombinekey_field="lastupdate_ts")
 public class ConsentPreference implements SerializableDeserializable {
     String startIDType;
     String startIDValue;
@@ -16,6 +17,7 @@ public class ConsentPreference implements SerializableDeserializable {
     boolean consentOptOut;
     String purpose;
     String domain;
+    Long lastupdate_ts;
 
     ConsentPreference(String startIDType, String startIDValue, String idType, String idValue, Faker faker) {
         this.startIDType = startIDType;
@@ -31,6 +33,24 @@ public class ConsentPreference implements SerializableDeserializable {
         this.purpose = String.join(",",purposes.subList(0, randomSize));
         
         this.domain = faker.options().option("Walmart US", "ACC");
+
+        this.lastupdate_ts = System.currentTimeMillis();
+    }
+
+    ConsentPreference(String[] csvRecord) {
+        if (csvRecord.length != 7) {
+            throw new IllegalArgumentException("CSV record must have exactly 7 fields.");
+        }
+        this.startIDType = csvRecord[0];
+        this.startIDValue = csvRecord[1];
+        this.idType = csvRecord[2];
+        this.idValue = csvRecord[3];
+        this.consentOptOut = Boolean.parseBoolean(csvRecord[4]);
+        this.purpose = csvRecord[5];
+        this.domain = csvRecord[6];
+
+        // We don't read lastupdate_ts ourselves. If we do write this object
+        // somewhere, like a Kafka stream, we are suppoed to update lastupdate_ts
     }
 
     public ConsentPreference(String jsonString) {
@@ -45,9 +65,24 @@ public class ConsentPreference implements SerializableDeserializable {
             this.consentOptOut = (Boolean) jsonObject.get("consentOptOut");
             this.purpose = (String) jsonObject.get("purpose");
             this.domain = (String) jsonObject.get("domain");
+            this.lastupdate_ts = (Long) jsonObject.get("lastupdate_ts");
         } catch (org.json.simple.parser.ParseException e) {
             throw new IllegalArgumentException("Invalid JSON string", e);
         }
+    }
+
+    @Override
+    public String toString() {
+        return "ConsentPreference{" +
+                "startIDType='" + startIDType + '\'' +
+                ", startIDValue='" + startIDValue + '\'' +
+                ", idType='" + idType + '\'' +
+                ", idValue='" + idValue + '\'' +
+                ", consentOptOut=" + consentOptOut +
+                ", purpose='" + purpose + '\'' +
+                ", domain='" + domain + '\'' +
+                ", lastupdate_ts=" + lastupdate_ts +
+                '}';
     }
 
     @Override
@@ -59,7 +94,8 @@ public class ConsentPreference implements SerializableDeserializable {
                 "\"idValue\":\"" + idValue + "\"," +
                 "\"consentOptOut\":" + consentOptOut + "," +
                 "\"purpose\":\"" + purpose + "\"," +
-                "\"domain\":\"" + domain + "\"" +
+                "\"domain\":\"" + domain + "\"," +
+                "\"lastupdate_ts\":" + lastupdate_ts + "" +
                 "}";
     }
 
@@ -75,8 +111,8 @@ public class ConsentPreference implements SerializableDeserializable {
         return consentData;
     }
     
-    static ConsentPreference fromCsvRecord(String[] csvRecord) {
-        throw new UnsupportedOperationException("not implemented");
+    public static ConsentPreference fromCsvRecord(String[] csvRecord) {
+        return new ConsentPreference(csvRecord);
     }
 
     static String[] getCsvHeader() {

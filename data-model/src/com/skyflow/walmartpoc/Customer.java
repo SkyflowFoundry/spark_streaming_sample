@@ -135,7 +135,7 @@ public class Customer implements SerializableDeserializable {
                 "\"city\":\"" + city + "\"," +
                 "\"state\":\"" + state + "\"," +
                 "\"zip\":\"" + zip + "\"," +
-                "\"country\":\"" + country + "\"" +
+                "\"country\":\"" + country + "\"," +
                 "\"lastupdate_ts\":" + lastupdate_ts + "" +
                 "}";
     }
@@ -152,7 +152,7 @@ public class Customer implements SerializableDeserializable {
         return customerData;
     }
 
-    static Customer fromCsvRecord(String[] csvRecord) {
+    public static Customer fromCsvRecord(String[] csvRecord) {
         return new Customer(csvRecord);
     }
 

@@ -123,12 +123,12 @@ public class EmrTask {
 
                 Map<String, String> dimensionMap = new HashMap<>();
                 dimensionMap.put("object", clazz.getSimpleName());
-                ValueDatum numRecords = stats.createOrGetUniqueMetricForName("emrRecordsProcessed", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
-                ValueDatum numSkyflowBatches = stats.createOrGetUniqueMetricForName("numSkyflowBatches", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
-                ValueDatum numKafkaBatches = stats.createOrGetUniqueMetricForName("numKafkaBatches", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
-                StatisticDatum skyflowBatchSizes = stats.createOrGetUniqueMetricForName("skyflowBatchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
-                StatisticDatum kafkaBatchSizes = stats.createOrGetUniqueMetricForName("kafkaBatchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
-                StatisticDatum apiLatency = stats.createOrGetUniqueMetricForName("apiLatency", dimensionMap, StandardUnit.MILLISECONDS, StatisticDatum.class);
+                ValueDatum numRecords = stats.createOrGetUniqueMetric("emrRecordsProcessed", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+                ValueDatum numSkyflowBatches = stats.createOrGetUniqueMetric("numSkyflowBatches", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+                ValueDatum numKafkaBatches = stats.createOrGetUniqueMetric("numKafkaBatches", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+                StatisticDatum skyflowBatchSizes = stats.createOrGetUniqueMetric("skyflowBatchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
+                StatisticDatum kafkaBatchSizes = stats.createOrGetUniqueMetric("kafkaBatchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
+                StatisticDatum apiLatency = stats.createOrGetUniqueMetric("apiLatency", dimensionMap, StandardUnit.MILLISECONDS, StatisticDatum.class);
 
                 numKafkaBatches.increment();
                 long kafkaBatchSize=0;

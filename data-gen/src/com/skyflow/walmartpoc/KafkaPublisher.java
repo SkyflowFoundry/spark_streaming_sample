@@ -51,8 +51,8 @@ public class KafkaPublisher<T extends SerializableDeserializable> implements Aut
 
         Map<String, String> dimensionMap = new HashMap<>();
         dimensionMap.put("object", clazz.getSimpleName());
-        this.numRecords = stats.createOrGetUniqueMetricForName("numRecordsPublished", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
-        this.numErrors = stats.createOrGetUniqueMetricForName("numPublishErrors", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+        this.numRecords = stats.createOrGetUniqueMetric("numRecordsPublished", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
+        this.numErrors = stats.createOrGetUniqueMetric("numPublishErrors", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
         this.stats = stats;
         
         producer = new KafkaProducer<>(kafkaProperties);

@@ -1,6 +1,7 @@
 package com.skyflow.walmartpoc;
 
 import java.io.IOException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -8,6 +9,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
+import software.amazon.awssdk.services.cloudwatch.model.Dimension;
 import software.amazon.awssdk.services.cloudwatch.model.MetricDatum;
 import software.amazon.awssdk.services.cloudwatch.model.PutMetricDataRequest;
 import software.amazon.awssdk.services.cloudwatch.model.PutMetricDataResponse;
@@ -32,13 +34,33 @@ public class CollectorAndReporter implements AutoCloseable {
         this.configuredIntervalMs = periodInMillisecs;
     }
 
-    public <T extends Datum> T createOrGetUniqueMetricForName(String metricName, Map<String, String> dimensions, StandardUnit unit, Class<T> datumClass) {
+    private static String serializeDimensions(Map<String, String> dimensions) {
+        if (dimensions == null || dimensions.isEmpty()) {
+            return "";
+        }
+        return dimensions.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> entry.getKey() + "=" + entry.getValue().replace("\\", "\\\\").replace(",", "\\,"))
+                .collect(Collectors.joining(","));
+    } 
+
+    private String serializeDimensions(List<Dimension> dimensions) {
+        if (dimensions == null || dimensions.isEmpty()) {
+            return "";
+        }
+        return dimensions.stream()
+                .sorted(Comparator.comparing(Dimension::name))
+                .map(dimension -> dimension.name() + "=" + dimension.value().replace("\\", "\\\\").replace(",", "\\,"))
+                .collect(Collectors.joining(","));
+    }
+
+    public <T extends Datum> T createOrGetUniqueMetric(String metricName, Map<String, String> dimensions, StandardUnit unit, Class<T> datumClass) {
         @SuppressWarnings("unchecked")
-        T ret = (T) metrics.computeIfAbsent(metricName, name -> {
+        T ret = (T) metrics.computeIfAbsent(String.format("%s %s",metricName,serializeDimensions(dimensions)), name -> {
             if (datumClass==StatisticDatum.class) {
-                return new StatisticDatum(name, dimensions, unit);
+                return new StatisticDatum(metricName, dimensions, unit);
             } else if (datumClass==ValueDatum.class) {
-                return new ValueDatum(name, dimensions, unit);
+                return new ValueDatum(metricName, dimensions, unit);
             } else {
                 throw new RuntimeException("Generator not implemented for " + datumClass);
             }
@@ -66,6 +88,9 @@ public class CollectorAndReporter implements AutoCloseable {
     private void sendToConsole(List<MetricDatum> metricDataList) {
         for (MetricDatum datum : metricDataList) {
             System.out.print("Metric: " + datum.metricName());
+            if (datum.hasDimensions()) {
+                System.out.print("  Dimensions: " + serializeDimensions((datum.dimensions())));
+            }
             System.out.print("  Value: " + datum.value());
             System.out.println("  Unit: " + datum.unit());
             if (datum.statisticValues() != null) {

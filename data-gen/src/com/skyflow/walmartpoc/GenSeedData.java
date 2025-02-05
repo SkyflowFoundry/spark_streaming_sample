@@ -103,7 +103,7 @@ public class GenSeedData {
                         // Write Customer Data to CSV
                         customerWriter.write(customer);
                         customerPublisher.publish(customer);
-                        logger.info("Wrote customer: {}",customer);
+                        logger.debug("Wrote customer: {}",customer);
 
                         // Determine number of payment cards
                         int paymentCardCount;
@@ -123,7 +123,7 @@ public class GenSeedData {
                             // Write Payment Card Data to CSV
                             paymentWriter.write(paymentInfo);
                             paymentPublisher.publish(paymentInfo);
-                            logger.info("Wrote PaymentInfo: {}",paymentInfo);
+                            logger.debug("Wrote PaymentInfo: {}",paymentInfo);
                         }
 
                         float randomValue = random.nextFloat();
@@ -142,13 +142,13 @@ public class GenSeedData {
                             // Write Transaction Data to CSV
                             transactionWriter.write(transaction);
                             transactionPublisher.publish(transaction);
-                            logger.info("Wrote Transaction {}",transaction);
+                            logger.debug("Wrote Transaction {}",transaction);
                         }
 
                         ConsentPreference preference = new ConsentPreference("custId",customer.custID,"otherId",faker.internet().uuid(),faker);
                         consentWriter.write(preference);
                         consentPublisher.publish(preference);
-                        logger.info("Wrote Consentpref {}",preference);
+                        logger.debug("Wrote Consentpref {}",preference);
                     } catch (IOException e) {
                         throw new RuntimeException("An error occurred while generating data", e);
                     }

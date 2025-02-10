@@ -30,7 +30,7 @@ public class SerializationDeserializationTest {
         });
 
         // Create a Transaction instance
-        Transaction transaction = new Transaction(customer, catalog, faker);
+        Transaction transaction = new Transaction(customer, catalog, faker, 0.5);
 
         // Serialize and deserialize Customer
         String customerJson = customer.toJSONString();

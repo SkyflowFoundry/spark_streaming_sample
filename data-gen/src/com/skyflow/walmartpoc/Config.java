@@ -24,10 +24,16 @@ public class Config {
         public float zero_txn_fraction;
         public float two_txn_fraction;
         // public float ten_txn_fraction; Do not specify. Calculated from above
+
+        public float mhmd_yes_fraction; // txns thare are MHMD "yes". Others are "no"
     }
     public static class UpsertProbabilities {
-        public float insert_customer_probability;
-        public float add_payment_probability;
+        // upsert can be insert, or update
+        public float insert_probability;
+
+        // Change can be one of the following two, or no change
+        public float street_address_change_probability;
+        public float email_change_probability;
     }
     public FakeData fake_data;
     public SeedData seed_data;

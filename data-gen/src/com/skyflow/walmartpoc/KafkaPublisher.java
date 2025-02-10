@@ -1,7 +1,9 @@
 package com.skyflow.walmartpoc;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -27,7 +29,7 @@ public class KafkaPublisher<T extends SerializableDeserializable> implements Aut
     private final ValueDatum numErrors;
     
     KafkaPublisher(Class<T> clazz, boolean runLocally,
-                    String kafkaBootstrap, String topicBase, int[] partitions,
+                    String kafkaBootstrap, String topicBase, String partitions,
                     CollectorAndReporter stats) {
         Properties kafkaProperties = new Properties();
         kafkaProperties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrap);
@@ -47,7 +49,27 @@ public class KafkaPublisher<T extends SerializableDeserializable> implements Aut
         kafkaProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
 
         this.topic = topicBase + "-" + clazz.getSimpleName();
-        this.partitions = partitions;
+        
+        int[] kafkaPartitions = null;
+        if (!partitions.isEmpty()) {
+            String[] partitionStrings = partitions.split(",");
+            List<Integer> partitionList = new ArrayList<>();
+            for (String partitionString : partitionStrings) {
+                partitionString = partitionString.trim();
+                if (partitionString.contains("-")) {
+                    String[] range = partitionString.split("-");
+                    int start = Integer.parseInt(range[0].trim());
+                    int end = Integer.parseInt(range[1].trim());
+                    for (int j = start; j <= end; j++) {
+                        partitionList.add(j);
+                    }
+                } else {
+                    partitionList.add(Integer.parseInt(partitionString));
+                }
+            }
+            kafkaPartitions = partitionList.stream().mapToInt(Integer::intValue).toArray();
+        }
+        this.partitions = kafkaPartitions;
 
         Map<String, String> dimensionMap = new HashMap<>();
         dimensionMap.put("object", clazz.getSimpleName());

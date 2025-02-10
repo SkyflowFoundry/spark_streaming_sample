@@ -4,7 +4,9 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 import com.opencsv.CSVReader;
@@ -74,4 +76,17 @@ public class CsvReader<T extends SerializableDeserializable> implements AutoClos
     public void close() throws IOException {
         reader.close();
     }
+
+    public static <T extends SerializableDeserializable> T[] readCsvFile(Class<T> clazz, Path path, String[] csvHeader ) throws CsvValidationException, IOException {
+    try (CsvReader<T> csvReader = new CsvReader<T>(clazz, path, csvHeader);) {
+        List<T> l = new ArrayList<>();
+        for (T c : csvReader) {
+            l.add(c);
+        }
+        @SuppressWarnings("unchecked")
+        T[] a = (T[]) l.toArray((T[]) java.lang.reflect.Array.newInstance(clazz, 0));
+        return a;
+    }
+}
+
 }

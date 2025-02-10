@@ -1,7 +1,6 @@
 package com.skyflow.walmartpoc;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -67,25 +66,7 @@ public class KafkaCustomerPublisher {
         String loadShape = args[0];
         String brokerServer = args[1];
         String topicName = args[2];
-        int[] kafkaPartitions = null;
-        if (!args[3].isEmpty()) {
-            String[] partitionStrings = args[3].split(",");
-            List<Integer> partitionList = new ArrayList<>();
-            for (String partitionString : partitionStrings) {
-                partitionString = partitionString.trim();
-                if (partitionString.contains("-")) {
-                    String[] range = partitionString.split("-");
-                    int start = Integer.parseInt(range[0].trim());
-                    int end = Integer.parseInt(range[1].trim());
-                    for (int j = start; j <= end; j++) {
-                        partitionList.add(j);
-                    }
-                } else {
-                    partitionList.add(Integer.parseInt(partitionString));
-                }
-            }
-            kafkaPartitions = partitionList.stream().mapToInt(Integer::intValue).toArray();
-        }
+        String kafkaPartitions = args[3];
         String cloudwatchNamespace = args[4];
         int reportingDelaySecs = Integer.parseInt(args[5]);
 

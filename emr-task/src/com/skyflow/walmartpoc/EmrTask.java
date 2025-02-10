@@ -25,12 +25,15 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+import org.apache.hadoop.mapreduce.TaskCounter;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
@@ -52,7 +55,6 @@ import org.json.simple.JSONArray;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.model.StandardUnit;
-import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueResponse;
@@ -64,6 +66,8 @@ import com.skyflow.utils.ReflectionUtils;
 import com.skyflow.utils.ReflectionUtils.VaultObjectInfo;
 
 public class EmrTask {
+    private static Logger logger = LogManager.getLogger("myLogger");
+    
     private static class VaultObjectInfoCache {
         private static volatile VaultObjectInfoCache instance;
         private final Map<Class<?>, VaultObjectInfo<?>> vaultObjectInfoMap;
@@ -113,8 +117,9 @@ public class EmrTask {
 
         @Override
         public Iterator<Row> call(Iterator<Row> iterator) throws Exception {
-            int partitionId = TaskContext.getPartitionId();
-            System.out.println("Starting partition with ID: " + partitionId);
+            TaskContext tc = 
+            String partitionId = "TaskId:"+TaskContext.getPartitionId() + "-RDDId:" + TaskContext.get().partitionId() + "-" + java.util.UUID.randomUUID().toString();
+            logger.info("Starting partition with ID: " + partitionId);
 
             try (PoolingHttpClientConnectionManager connMgr = PoolingHttpClientConnectionManagerBuilder.create().setMaxConnTotal(1).build();
                  final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000)) {
@@ -129,6 +134,7 @@ public class EmrTask {
                 StatisticDatum skyflowBatchSizes = stats.createOrGetUniqueMetric("skyflowBatchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
                 StatisticDatum kafkaBatchSizes = stats.createOrGetUniqueMetric("kafkaBatchSizes", dimensionMap, StandardUnit.COUNT, StatisticDatum.class);
                 StatisticDatum apiLatency = stats.createOrGetUniqueMetric("apiLatency", dimensionMap, StandardUnit.MILLISECONDS, StatisticDatum.class);
+                ValueDatum apiErrors = stats.createOrGetUniqueMetric("apiErrors", dimensionMap, StandardUnit.COUNT, ValueDatum.class);
 
                 numKafkaBatches.increment();
                 long kafkaBatchSize=0;
@@ -149,6 +155,7 @@ public class EmrTask {
                         JSONObject[] transformed = getTokenizedObjects(
                             partitionId,
                             apiLatency,
+                            apiErrors,
                             batch.toArray(new String[0]),
                             client
                         );
@@ -161,24 +168,23 @@ public class EmrTask {
                     stats.pollAndReport(false);
                 }
                 kafkaBatchSizes.value(kafkaBatchSize);
-                System.out.println("Processed " + result.size() + " items in partition with ID: " + partitionId);
+                logger.info("Processed " + result.size() + " items in partition with ID: " + partitionId);
                 return result.iterator();
             }
         }
 
-        private JSONObject[] getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, CloseableHttpClient client) throws Exception {
-            System.out.println("Processing " + jsons.length + " rows in partition " + partitionId);
+        private JSONObject[] getTokenizedObjects(String partitionId, StatisticDatum apiLatency, ValueDatum apiError, String[] jsons, CloseableHttpClient client) throws Exception {
             try {
                 VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
                 VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
-                return _getTokenizedObjects(partitionId, apiLatency, jsons, objectInfo, client);
+                return _getTokenizedObjects(partitionId, apiLatency, apiError, jsons, objectInfo, client);
             } catch (Exception e) {
                 throw new Exception("NOT-FOR-PRODUCTION: Failed to process: " + String.join(", ", jsons), e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
             }
         }
 
         @SuppressWarnings("unchecked")
-        private JSONObject[] _getTokenizedObjects(int partitionId, StatisticDatum apiLatency, String[] jsons, VaultObjectInfo<T> objectInfo, CloseableHttpClient client) throws Exception {
+        private JSONObject[] _getTokenizedObjects(String partitionId, StatisticDatum apiLatency, ValueDatum apiError, String[] jsons, VaultObjectInfo<T> objectInfo, CloseableHttpClient client) throws Exception {
             JSONObject[] resultList = new JSONObject[jsons.length];
             if (!shortCircuitSkyflow) {
                 T[] objArray = (T[]) new SerializableDeserializable[jsons.length];
@@ -200,36 +206,45 @@ public class EmrTask {
                     i = i + 1;
                 }
     
-                // Create a JSON/REST request to "vault_url" for inserting records
                 String insertRecordUrl = vault_url + "/v1/vaults/" + vault_id + "/" + objectInfo.tableName;
                 JSONObject insertReqBody = new JSONObject();
                 insertReqBody.put("records", recordsArray);
                 insertReqBody.put("tokenization", true);
-                insertReqBody.put("upsert", objectInfo.upsertColumnName);
-                    long startTime = System.currentTimeMillis();
+                //insertReqBody.put("upsert", objectInfo.upsertColumnName);
+
+                long latency; 
+                long startTime = System.currentTimeMillis();
 
                 String bodyString = null;
-                // Create an HTTP request
+                
                 ClassicHttpRequest request = ClassicRequestBuilder
                     .post(URI.create(insertRecordUrl))
                     .addHeader("Authorization", "Bearer " + credentialString)
                     .setEntity(insertReqBody.toJSONString(), ContentType.APPLICATION_JSON)
                     .build();
 
-                // Send the request and get the response
-                // We NEED the synch call
+                // We NEED the synch call, so supress warnings about it
                 try (@SuppressWarnings("deprecation") CloseableHttpResponse response = client.execute(request);) {
                     if (response.getCode() != 200) {
                         String statusLine = response.getReasonPhrase();
-                        throw new Exception("http response: " + statusLine);
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()))) {
+                            bodyString = reader.lines().collect(Collectors.joining("\n"));
+                        } catch (Exception e) {
+                            bodyString = "(Failed to read response body)";
+                        }
+                        throw new Exception("http response: " + statusLine + "\nResponse Body: " + bodyString + "\nRequest: " + insertReqBody.toJSONString());
                     }
 
-                    // Parse the response body as JSON
                     try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()))) {
                         bodyString = reader.lines().collect(Collectors.joining("\n"));
                     } finally {
-                        apiLatency.value(System.currentTimeMillis() - startTime);
+                        latency = System.currentTimeMillis() - startTime;
                     }
+                    apiLatency.value(latency);
+                    logger.info("Processed " + jsons.length + " rows in partition " + partitionId + " in (ms): " + latency);
+                } catch (Exception e) {
+                    apiError.increment();
+                    throw e;
                 }
 
                 JSONParser jsonParser = new JSONParser();
@@ -273,13 +288,32 @@ public class EmrTask {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("Version EMR 7");
+        System.out.println("EMRTask Version 7");
 
-        if (args.length < 16) {
-            System.err.println("Usage: EmrTask <localIO> <full.java.class> <output-s3-bucket> <table-name> <kafka-bootstrap> <kafka-topic> <kafka-batch-size> <batch-delay-secs> <aws-region> <secret-name> <vault-id> <vault-url> <vault-batch-size> <short-circuit-skyflow?> <namespace> <reporting-delay-secs>");
+        if (args.length < 17) {
+            System.err.println("Usage: " + EmrTask.class.getName()
+                    + "<localIO> "
+                    + "<full.java.class> "
+                    + "<num-processing-partitions> "
+                    + "<output-s3-bucket> "
+                    + "<table-name> "
+                    + "<kafka-bootstrap> "
+                    + "<kafka-topic> "
+                    + "<kafka-batch-size> "
+                    + "<batch-delay-secs> "
+                    + "<aws-region> "
+                    + "<secret-name> "
+                    + "<vault-id> "
+                    + "<vault-url> "
+                    + "<vault-batch-size> "
+                    + "<short-circuit-skyflow?> "
+                    + "<namespace> "
+                    + "<reporting-delay-secs>"
+                    );
             System.err.println("Pipeline Type:");
             System.err.println("  <localIO>               : A boolean flag to determine if input comes from plaintext kafka. Spark runs locally.");
             System.err.println("  <full.java.class>       : The fully qualified Java class name of the object being processed");
+            System.err.println("  <num-processing-partitions>: The number of partitions for processing.");
             System.err.println("Output Instructions:");
             System.err.println("  <output-s3-bucket>      : The S3 bucket where the output will be stored.");
             System.err.println("  <table-name>            : The name of the table to be used in the process.");
@@ -304,24 +338,26 @@ public class EmrTask {
         boolean localIO = Boolean.parseBoolean(args[0]);
         @SuppressWarnings("unchecked")
         Class<? extends SerializableDeserializable> clazz = (Class<? extends SerializableDeserializable>) Class.forName(args[1]);
-        String outputBucket = args[2];
-        String tableName = args[3];
-        String kafkaBootstrap = args[4];
-        String kafkaTopic = String.format("%s-%s",args[5],clazz.getSimpleName());
-        int kafkaBatchSize = Integer.parseInt(args[6]);
-        int microBatchSeconds = Integer.parseInt(args[7]);
-        String awsRegion = args[8];
-        String secretName = args[9];
-        String vault_id = args[10];
-        String vault_url = args[11];
-        int vaultBatchSize = Integer.parseInt(args[12]);
-        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[13]);
-        String cloudwatchNamespace = args[14];
-        int reportingDelaySecs = Integer.parseInt(args[15]);
+        int numProcessingPartitions = Integer.parseInt(args[2]);
+        String outputBucket = args[3];
+        String tableName = args[4];
+        String kafkaBootstrap = args[5];
+        String kafkaTopic = String.format("%s-%s",args[6],clazz.getSimpleName());
+        int kafkaBatchSize = Integer.parseInt(args[7]);
+        int microBatchSeconds = Integer.parseInt(args[8]);
+        String awsRegion = args[9];
+        String secretName = args[10];
+        String vault_id = args[11];
+        String vault_url = args[12];
+        int vaultBatchSize = Integer.parseInt(args[13]);
+        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[14]);
+        String cloudwatchNamespace = args[15];
+        int reportingDelaySecs = Integer.parseInt(args[16]);
         // For sanity checking, print out all the gathered args
         System.out.println("Pipeline Type:");
         System.out.println("  Local IO: " + localIO);
         System.out.println("  Class: " + clazz.getName());
+        System.out.println("  Num Processing Partitions: " + numProcessingPartitions);
         System.out.println("Output Instructions:");
         System.out.println("  Output Bucket: " + outputBucket);
         System.out.println("  Table Name: " + tableName);
@@ -371,6 +407,9 @@ public class EmrTask {
 
         // Build input data frame
         Dataset<Row> inputDF = buildInputDF(spark, localIO, kafkaBootstrap, kafkaTopic, kafkaBatchSize);
+
+        // Repartition for greater parallelism
+        //inputDF = inputDF.repartition(numProcessingPartitions);
 
         // Tokenize sensitive fields using Skyflow.
 
@@ -616,28 +655,6 @@ public class EmrTask {
             } catch (UnknownHostException e2) {
                 System.out.println("    DNS not resolved for: " + host);
             }
-        }
-
-        // check that we can write to output bucket, by writing a file ".writablity-test" to it
-        String testFileName = "/writability-test";
-        String testContent = "This is a test file to check writability.";
-        // Use the AWS SDK to write to the S3 bucket
-        software.amazon.awssdk.services.s3.S3Client s3Client = software.amazon.awssdk.services.s3.S3Client.builder()
-                .region(software.amazon.awssdk.regions.Region.of(awsRegion))
-                .build();
-        software.amazon.awssdk.services.s3.model.PutObjectRequest putObjectRequest = software.amazon.awssdk.services.s3.model.PutObjectRequest.builder()
-                .bucket(outputBucket)
-                .key(testFileName)
-                .contentType("text/plain")
-                .build();
-        try {
-            s3Client.putObject(putObjectRequest, software.amazon.awssdk.core.sync.RequestBody.fromString(testContent));
-            System.out.println("Successfully wrote test file to output bucket: " + outputBucket);
-        } catch (S3Exception e3) {
-            System.out.println("Can't write to bucket: " + outputBucket + " : File : " + testFileName + " : " + e3.awsErrorDetails().errorMessage());
-            e3.printStackTrace();
-            //allGood = false;
-            System.out.println("Ignoring error for now"); // It appears that the EMR master has different IAM role from EMR slave / task. Hence this is only indicative of a few possible problems.
         }
 
         if (!allGood) {

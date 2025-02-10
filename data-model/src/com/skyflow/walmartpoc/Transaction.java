@@ -15,13 +15,13 @@ public class Transaction implements SerializableDeserializable {
     String MHMD_flag;
     Long lastupdate_ts;
 
-    Transaction(Customer customer, Catalog item, Faker faker) {
+    Transaction(Customer customer, Catalog item, Faker faker, double mhmd_yes_fraction) {
         this.customerID = customer.custID;
         this.sku_id = item.sku_id;
         this.orderID = faker.internet().uuid();
         this.orderItemID = faker.internet().uuid();
         this.orderDate = faker.date().past(365, java.util.concurrent.TimeUnit.DAYS).toString();
-        this.MHMD_flag = faker.bool().bool() ? "yes" : "no";
+        this.MHMD_flag = faker.random().nextDouble() < mhmd_yes_fraction ? "yes" : "no";
 
         this.lastupdate_ts = System.currentTimeMillis();
     }

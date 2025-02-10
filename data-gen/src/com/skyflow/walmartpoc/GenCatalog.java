@@ -3,8 +3,6 @@ package com.skyflow.walmartpoc;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,25 +36,7 @@ public class GenCatalog {
         String outputDir = args[3];
         String kafkaBootstrap = args[4];
         String kafkaTopicBase = args[5];
-        int[] kafkaPartitions = null;
-        if (!args[6].isEmpty()) {
-            String[] partitionStrings = args[6].split(",");
-            List<Integer> partitionList = new ArrayList<>();
-            for (String partitionString : partitionStrings) {
-                partitionString = partitionString.trim();
-                if (partitionString.contains("-")) {
-                    String[] range = partitionString.split("-");
-                    int start = Integer.parseInt(range[0].trim());
-                    int end = Integer.parseInt(range[1].trim());
-                    for (int j = start; j <= end; j++) {
-                        partitionList.add(j);
-                    }
-                } else {
-                    partitionList.add(Integer.parseInt(partitionString));
-                }
-            }
-            kafkaPartitions = partitionList.stream().mapToInt(Integer::intValue).toArray();
-        }
+        String kafkaPartitions = args[6];
         String namespace = args[7];
         int reportingDelaySecs = Integer.parseInt(args[8]);
 

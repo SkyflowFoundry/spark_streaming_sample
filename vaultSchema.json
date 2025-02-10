@@ -64,13 +64,13 @@
             {
               "name": "skyflow.options.unique",
               "values": [
-                "true"
+                "false"
               ]
             },
             {
               "name": "skyflow.options.index",
               "values": [
-                "false"
+                "true"
               ]
             },
             {

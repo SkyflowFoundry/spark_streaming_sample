@@ -1,87 +1,124 @@
 package com.skyflow.walmartpoc;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Semaphore;
+
+import org.apache.hc.core5.http.ContentType;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
-
-import com.skyflow.entities.InsertOptions;
-import com.skyflow.entities.SkyflowConfiguration;
-import com.skyflow.entities.TokenProvider;
-import com.skyflow.entities.UpsertOption;
-import com.skyflow.vault.Skyflow;
+import org.json.simple.parser.JSONParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.skyflow.utils.ReflectionUtils;
 import com.skyflow.utils.ReflectionUtils.VaultObjectInfo;
 
+import software.amazon.awssdk.services.cloudwatch.model.StandardUnit;
 
-public class VaultDataLoader<T> {
-    private final Skyflow skyflow_client;
-    @SuppressWarnings("unused")
-    private final int batch_size;
-    private final InsertOptions insertOptions;
+/* This is NOT a generalizable vault client. It only caches connections for one type of object,
+ * and it doesn't "shut down cleanly". See close() mehod.
+ */
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+
+public class VaultDataLoader<T> implements AutoCloseable {
+    private static final Logger logger = LoggerFactory.getLogger(VaultDataLoader.class);
+
+    private final String vault_id;
+    private final String vault_url;
+    private final String credentialString;
+    private final Semaphore semaphore;
     private final VaultObjectInfo<T> classInfo;
+    private final CloseableHttpClient httpClient;
+    private final StatisticDatum apiLatency;
+    private final ValueDatum apiError;
+    private final ValueDatum blockingWaits;
 
-    public VaultDataLoader(String vault_id, String vault_url, int max_rows_in_batch, TokenProvider access_token_generator, Class<T> objectClass) throws Exception {
-
-        SkyflowConfiguration skyflowConfig = new SkyflowConfiguration(vault_id,
-                                                                      vault_url,
-                                                                      access_token_generator);
-        this.skyflow_client = Skyflow.init(skyflowConfig);
-
-        this.batch_size = max_rows_in_batch;
-
+    public VaultDataLoader(String vault_id, String vault_url, int num_parallel_reqs, String vaultApiKey, CollectorAndReporter stats, Class<T> objectClass) throws Exception {
+        this.vault_id = vault_id;
+        this.vault_url = vault_url;
+        this.credentialString = vaultApiKey;
+        this.semaphore = new Semaphore(num_parallel_reqs);
         this.classInfo = ReflectionUtils.getVaultObjectInfo(objectClass);
-
-        UpsertOption[] upsertOptions = null;
-        if (classInfo.upsertColumnName!=null) {
-            upsertOptions = new UpsertOption[1];
-            upsertOptions[0] = new UpsertOption(classInfo.tableName, classInfo.upsertColumnName);
-        }
-        this.insertOptions = new InsertOptions(
-            true, upsertOptions, false
-        );
-    }
-
-    /**
-     * Wrapper for @see {@link ReflectionUtils#jsonObjectForVault(Object, VaultObjectInfo)}
-     */
-    protected JSONObject jsonObjectForVault(T obj) {
-        return ReflectionUtils.jsonObjectForVault(obj, classInfo);
-    }
-
-    /**
-     * Wrapper for @see {@link ReflectionUtils#replaceWithValuesFromVault(Object, JSONObject, VaultObjectInfo, boolean)}
-     */
-    protected void replaceWithValuesFromVault(T obj, JSONObject vaultResponse) throws Exception {
-        ReflectionUtils.replaceWithValuesFromVault(obj, vaultResponse, classInfo);
+        this.apiLatency = stats.createOrGetUniqueMetric("apiLatency", null, StandardUnit.MILLISECONDS, StatisticDatum.class);
+        this.apiError = stats.createOrGetUniqueMetric("apiErrors", null, StandardUnit.COUNT, ValueDatum.class);
+        this.blockingWaits = stats.createOrGetUniqueMetric("blockingWaits", null, StandardUnit.COUNT, ValueDatum.class);
+        this.httpClient = HttpClients.createDefault();
     }
 
     @SuppressWarnings("unchecked")
-    public String loadObjectIntoVault(T object) throws Exception {
-        // TBD make more efficient by doing this in a batch
+    public CompletableFuture<String> loadObjectIntoVault(T object, boolean ignoreResponse) {
+        return CompletableFuture.supplyAsync(() -> {
+            //semaphore.acquireUninterruptibly();
 
-        // construct insert input
-        JSONObject records = new JSONObject();
-        JSONArray recordsArray = new JSONArray();
+            JSONArray recordsArray = new JSONArray();
+            JSONObject record = new JSONObject();
+            record.put("table", classInfo.tableName);
+            JSONObject fields = ReflectionUtils.jsonObjectForVault(object, classInfo);
+            record.put("fields", fields);
+            recordsArray.add(record);
 
-        JSONObject record = new JSONObject();
-        record.put("table", classInfo.tableName);
+            String insertRecordUrl = vault_url + "/v1/vaults/" + vault_id + "/" + classInfo.tableName;
+            JSONObject insertReqBody = new JSONObject();
+            insertReqBody.put("records", recordsArray);
+            insertReqBody.put("tokenization", true);
+            insertReqBody.put("upsert", classInfo.upsertColumnName);
+            String insertReqBodyString = insertReqBody.toJSONString();
 
-        JSONObject fields = jsonObjectForVault(object);
+            HttpPost request = new HttpPost(insertRecordUrl);
+            request.setHeader("Authorization", "Bearer " + credentialString);
+            request.setEntity(new StringEntity(insertReqBodyString, ContentType.APPLICATION_JSON));
 
-        record.put("fields", fields);
-        recordsArray.add(record);
-        records.put("records", recordsArray);
+            final String requestId = java.util.UUID.randomUUID().toString();
+            long startTime = System.currentTimeMillis();
 
-        JSONObject insertResponse = this.skyflow_client.insert(records,insertOptions);
+            try (@SuppressWarnings("deprecation") CloseableHttpResponse response = httpClient.execute(request)) {
+                long latency = (System.currentTimeMillis() - startTime);
+                //semaphore.release();
+                apiLatency.value(latency);
 
-        JSONArray responseRecords = (JSONArray) insertResponse.get("records");
-        JSONObject firstRecord = (JSONObject) ((JSONArray) responseRecords).get(0);
-        JSONObject extractedFields = (JSONObject) firstRecord.get("fields");
-        //System.out.println(extractedFields.toJSONString());
+                if (response.getCode() != 200) {
+                    String statusLine = response.getReasonPhrase();
+                    String bodyString = EntityUtils.toString(response.getEntity());
+                    apiError.increment();
+                    throw new Exception("NOT-FOR-PRODUCTION: Request: " + requestId + " http response: " + statusLine + "\nResponse Body: " + bodyString + "\nRequest: " + insertReqBody.toJSONString());
+                }
 
-        // Extract the values from the JSONObject extractedFields and update the record with the new values
-        replaceWithValuesFromVault(object, extractedFields);
+                if (ignoreResponse) {
+                    return "ignored";
+                } else {
+                    String bodyString = EntityUtils.toString(response.getEntity());
+                    JSONParser jsonParser = new JSONParser();
+                    JSONObject insertResponse = (JSONObject) jsonParser.parse(bodyString);
+                    JSONArray responseRecords = (JSONArray) insertResponse.get("records");
 
-        return (String) extractedFields.get("skyflow_id");
+                    if (responseRecords.size() != 1) {
+                        throw new RuntimeException("NOT-FOR-PRODUCTION: Request: " + requestId + " Skyflow was asked to upsert 1 record and returned " + responseRecords.size() + " results");
+                    }
+
+                    JSONObject responseRecord = (JSONObject) responseRecords.get(0);
+                    JSONObject extractedFields = (JSONObject) responseRecord.get("tokens");
+                    String skyflow_id = (String) responseRecord.get("skyflow_id");
+
+                    ReflectionUtils.replaceWithValuesFromVault(object, extractedFields, classInfo);
+                    return skyflow_id;
+                }
+            } catch (Exception e) {
+                semaphore.release();
+                apiError.increment();
+                throw new RuntimeException(e);
+            }
+        });
     }
+
+    @Override
+    public void close() throws Exception {
+        httpClient.close();
+        // We are ignoring any exception above. Also, I haven't researched if all pending requests are
+        // completed at this time. Ideally, the semaphore would be handled by the caller
+	}
 }

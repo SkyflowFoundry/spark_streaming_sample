@@ -15,7 +15,7 @@ public class GenSeedData {
     private static final Logger logger = LoggerFactory.getLogger(GenSeedData.class);
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 10) {
+        if (args.length != 10) {
             System.err.println("Usage: java " + GenSeedData.class.getName() + " <runLocally> <configFilePath> <load-shape> <outputDir> <gen-txns> <kafka-bootstrap> <kafka-topic-base> <kafka-partitions> <namespace> <reporting-delay-secs>");
             System.err.println("Generation Instructions:");
             System.err.println("  <runLocally>            : Run locally (write to plaintext Kafka)");

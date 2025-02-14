@@ -1,8 +1,6 @@
 package com.skyflow.walmartpoc;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.net.Inet4Address;
@@ -11,7 +9,6 @@ import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
-import java.net.URI;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -23,20 +20,20 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 
-import org.apache.hadoop.mapreduce.TaskCounter;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
-import org.apache.hc.core5.http.ClassicHttpRequest;
+import org.apache.hc.client5.http.async.methods.SimpleHttpRequest;
+import org.apache.hc.client5.http.async.methods.SimpleHttpResponse;
+import org.apache.hc.client5.http.async.methods.SimpleRequestBuilder;
+import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
+import org.apache.hc.client5.http.impl.async.HttpAsyncClients;
+import org.apache.hc.core5.concurrent.FutureCallback;
 import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
-import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.*;
@@ -49,6 +46,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONArray;
 
@@ -102,9 +100,11 @@ public class EmrTask {
         private final String vault_url;
         private final String credentialString;
         private final boolean shortCircuitSkyflow;
+        private final Semaphore semaphore;
 
         public BatchProcessor(String cloudwatchNamespace, int reportingDelaySecs, Class<T> clazz,
-                                int vaultBatchSize, String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow) {
+                                int vaultBatchSize, int maxOutstandingRequests,
+                                String vault_id, String vault_url, String credentialString, boolean shortCircuitSkyflow) {
             this.cloudwatchNamespace = cloudwatchNamespace;
             this.reportingDelaySecs = reportingDelaySecs;
             this.clazz = clazz;
@@ -113,18 +113,15 @@ public class EmrTask {
             this.vault_url = vault_url;
             this.credentialString = credentialString;
             this.shortCircuitSkyflow = shortCircuitSkyflow;
+            this.semaphore = new Semaphore(maxOutstandingRequests);
         }
 
         @Override
         public Iterator<Row> call(Iterator<Row> iterator) throws Exception {
-            TaskContext tc = 
-            String partitionId = "TaskId:"+TaskContext.getPartitionId() + "-RDDId:" + TaskContext.get().partitionId() + "-" + java.util.UUID.randomUUID().toString();
-            logger.info("Starting partition with ID: " + partitionId);
+            String partitionId = "TaskId:"+TaskContext.getPartitionId() + "-" + java.util.UUID.randomUUID().toString();
+            logger.info("PART-START " + partitionId + " Starting partition");
 
-            try (PoolingHttpClientConnectionManager connMgr = PoolingHttpClientConnectionManagerBuilder.create().setMaxConnTotal(1).build();
-                 final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000)) {
-
-                HttpClientBuilder connBuilder = HttpClients.custom().setConnectionManager(connMgr);
+            try (final CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000)) {
 
                 Map<String, String> dimensionMap = new HashMap<>();
                 dimensionMap.put("object", clazz.getSimpleName());
@@ -138,9 +135,10 @@ public class EmrTask {
 
                 numKafkaBatches.increment();
                 long kafkaBatchSize=0;
-                List<Row> result = new ArrayList<>();
+                List<CompletableFuture<List<Row>>> futures = new ArrayList<>();
+                CloseableHttpAsyncClient httpClient = HttpAsyncClients.createDefault();
+                httpClient.start();
                 while (iterator.hasNext()) {
-                    CloseableHttpClient client = connBuilder.build();
                     List<String> batch = new ArrayList<>();
                     for (int i = 0; i < vaultBatchSize && iterator.hasNext(); i++) {
                         numRecords.increment();
@@ -151,41 +149,42 @@ public class EmrTask {
                         numSkyflowBatches.increment();
                         skyflowBatchSizes.value(batch.size());
 
-                        // Process the batch
-                        JSONObject[] transformed = getTokenizedObjects(
+                        semaphore.acquire();
+
+                        futures.add(getTokenizedObjects(
                             partitionId,
                             apiLatency,
                             apiErrors,
                             batch.toArray(new String[0]),
-                            client
-                        );
-                        for (JSONObject obj : transformed) {
-                            @SuppressWarnings("unchecked")
-                            TreeMap<String, Object> sortedMap = new TreeMap<>(obj);
-                            result.add(RowFactory.create(sortedMap.values().toArray()));
-                        }
+                            httpClient
+                        ));
                     }
                     stats.pollAndReport(false);
                 }
                 kafkaBatchSizes.value(kafkaBatchSize);
-                logger.info("Processed " + result.size() + " items in partition with ID: " + partitionId);
-                return result.iterator();
+                logger.info("PART-END " + partitionId + " Processed " + futures.size() + " skyflow batches in partition");
+                
+                return futures.stream()
+                    .map(CompletableFuture::join)
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList())
+                    .iterator();
             }
         }
 
-        private JSONObject[] getTokenizedObjects(String partitionId, StatisticDatum apiLatency, ValueDatum apiError, String[] jsons, CloseableHttpClient client) throws Exception {
+        private CompletableFuture<List<Row>> getTokenizedObjects(String partitionId, StatisticDatum apiLatency, ValueDatum apiError, String[] jsons, CloseableHttpAsyncClient httpClient) throws Exception {
             try {
                 VaultObjectInfoCache cache = VaultObjectInfoCache.getInstance();
                 VaultObjectInfo<T> objectInfo = cache.getVaultObjectInfo(clazz);
-                return _getTokenizedObjects(partitionId, apiLatency, apiError, jsons, objectInfo, client);
+                return _getTokenizedObjects(partitionId, apiLatency, apiError, jsons, objectInfo, httpClient);
             } catch (Exception e) {
                 throw new Exception("NOT-FOR-PRODUCTION: Failed to process: " + String.join(", ", jsons), e); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE
             }
         }
 
         @SuppressWarnings("unchecked")
-        private JSONObject[] _getTokenizedObjects(String partitionId, StatisticDatum apiLatency, ValueDatum apiError, String[] jsons, VaultObjectInfo<T> objectInfo, CloseableHttpClient client) throws Exception {
-            JSONObject[] resultList = new JSONObject[jsons.length];
+        private CompletableFuture<List<Row>> _getTokenizedObjects(String partitionId, StatisticDatum apiLatency, ValueDatum apiError, String[] jsons, VaultObjectInfo<T> objectInfo, CloseableHttpAsyncClient httpClient) throws Exception {
+            CompletableFuture<List<Row>> future = new CompletableFuture<>();
             if (!shortCircuitSkyflow) {
                 T[] objArray = (T[]) new SerializableDeserializable[jsons.length];
 
@@ -210,67 +209,100 @@ public class EmrTask {
                 JSONObject insertReqBody = new JSONObject();
                 insertReqBody.put("records", recordsArray);
                 insertReqBody.put("tokenization", true);
-                //insertReqBody.put("upsert", objectInfo.upsertColumnName);
+                insertReqBody.put("upsert", objectInfo.upsertColumnName);
 
-                long latency; 
+                SimpleHttpRequest request = SimpleRequestBuilder.post(insertRecordUrl).build();
+                request.setHeader("Authorization", "Bearer " + credentialString);
+                request.setBody(insertReqBody.toJSONString(), ContentType.APPLICATION_JSON);
+                
+                final String requestId = java.util.UUID.randomUUID().toString();
+                logger.info("API-REQ " + partitionId + " " + requestId + " emitting request");
                 long startTime = System.currentTimeMillis();
 
-                String bodyString = null;
-                
-                ClassicHttpRequest request = ClassicRequestBuilder
-                    .post(URI.create(insertRecordUrl))
-                    .addHeader("Authorization", "Bearer " + credentialString)
-                    .setEntity(insertReqBody.toJSONString(), ContentType.APPLICATION_JSON)
-                    .build();
+                httpClient.execute(request, new FutureCallback<SimpleHttpResponse>() {
+                    @Override
+                    public void completed(SimpleHttpResponse response) {
+                        long latency = (System.currentTimeMillis() - startTime);
+                        semaphore.release();
 
-                // We NEED the synch call, so supress warnings about it
-                try (@SuppressWarnings("deprecation") CloseableHttpResponse response = client.execute(request);) {
-                    if (response.getCode() != 200) {
-                        String statusLine = response.getReasonPhrase();
-                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()))) {
-                            bodyString = reader.lines().collect(Collectors.joining("\n"));
-                        } catch (Exception e) {
-                            bodyString = "(Failed to read response body)";
+                        logger.info("API-RESP-COMPL " + partitionId + " " + requestId + " " + latency + " (ms) recvd response for request " + requestId);
+                        apiLatency.value(latency);
+
+                        String bodyString = null;
+
+                        if (response.getCode() != 200) {
+                            String statusLine = response.getReasonPhrase();
+                            bodyString = response.getBodyText();
+                            apiError.increment();
+                            future.completeExceptionally(new Exception("Partion id: " + partitionId + " Request: " + requestId + " http response: " + statusLine + "\nResponse Body: " + bodyString + "\nRequest: " + insertReqBody.toJSONString()));
+                            return;
                         }
-                        throw new Exception("http response: " + statusLine + "\nResponse Body: " + bodyString + "\nRequest: " + insertReqBody.toJSONString());
+    
+                        bodyString = response.getBodyText();
+                        JSONParser jsonParser = new JSONParser();
+                        JSONObject insertResponse;
+                        try {
+                            insertResponse = (JSONObject) jsonParser.parse(bodyString);
+                        } catch (ParseException e) {
+                            apiError.increment();
+                            future.completeExceptionally(new Exception("NOT-FOR-PRODUCTION: Failed to process: " + String.join(", ", jsons), e)); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE);
+                            return;
+                        }
+                        JSONArray responseRecords = (JSONArray) insertResponse.get("records");
+        
+                        if (responseRecords.size() != jsons.length) {
+                            future.completeExceptionally(new RuntimeException("NOT-FOR-PRODUCTION: Partion id: " + partitionId + " Request: " + requestId + " Skyflow was asked to upsert " + jsons.length + " records and returned " + responseRecords.size() + " results"));
+                        }
+                        List<Row> resultList = new ArrayList<>();
+                        for (int i = 0; i < responseRecords.size(); i++) {
+                            JSONObject responseRecord = (JSONObject) responseRecords.get(i);
+                            JSONObject extractedFields = (JSONObject) responseRecord.get("tokens");
+                            String skyflow_id = (String) responseRecord.get("skyflow_id");
+        
+                            T obj = objArray[i];
+                            try {
+                                ReflectionUtils.replaceWithValuesFromVault(obj, extractedFields, objectInfo);
+                            } catch (Exception e) {
+                                apiError.increment();
+                                future.completeExceptionally(new Exception("NOT-FOR-PRODUCTION: Partion id: " + partitionId + " Request: " + requestId + " Failed to process: " + String.join(", ", jsons), e)); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE);
+                                return;
+                            }
+        
+                            String objectJson = obj.toJSONString();
+                            JSONParser parser = new JSONParser();
+                            JSONObject jsonObject;
+                            try {
+                                jsonObject = (JSONObject) parser.parse(objectJson);
+                            } catch (ParseException e) {
+                                apiError.increment();
+                                future.completeExceptionally(new Exception("NOT-FOR-PRODUCTION: Partion id: " + partitionId + " Request: " + requestId + " Failed to process: " + String.join(", ", jsons), e)); // THIS LOGS PII. OBVIOUSLY NOT FOR PRODUCTION USE);
+                                return;
+                            }
+                            jsonObject.put("skyflow_id", skyflow_id);
+                            TreeMap<String, Object> sortedMap = new TreeMap<>(jsonObject);
+                            resultList.add(RowFactory.create(sortedMap.values().toArray()));
+                        }
+        
+                        future.complete(resultList);
                     }
 
-                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.getEntity().getContent()))) {
-                        bodyString = reader.lines().collect(Collectors.joining("\n"));
-                    } finally {
-                        latency = System.currentTimeMillis() - startTime;
+                    @Override
+                    public void failed(Exception ex) {
+                        semaphore.release();
+                        logger.info("API-RESP-FAIL " + partitionId + " " + requestId + " failed on " + requestId);
+                        apiError.increment();
+                        future.completeExceptionally(ex);
                     }
-                    apiLatency.value(latency);
-                    logger.info("Processed " + jsons.length + " rows in partition " + partitionId + " in (ms): " + latency);
-                } catch (Exception e) {
-                    apiError.increment();
-                    throw e;
-                }
 
-                JSONParser jsonParser = new JSONParser();
-                JSONObject insertResponse = (JSONObject) jsonParser.parse(bodyString);
-                JSONArray responseRecords = (JSONArray) insertResponse.get("records");
-
-                if (responseRecords.size() != jsons.length) {
-                    throw new RuntimeException("Skyflow was asked to upsert " + jsons.length + " records and returned " + responseRecords.size() + " results");
-                }
-                for (i = 0; i < responseRecords.size(); i++) {
-                    JSONObject responseRecord = (JSONObject) responseRecords.get(i);
-                    JSONObject extractedFields = (JSONObject) responseRecord.get("tokens");
-                    String skyflow_id = (String) responseRecord.get("skyflow_id");
-
-                    T obj = objArray[i];
-                    ReflectionUtils.replaceWithValuesFromVault(obj, extractedFields, objectInfo);
-
-                    String objectJson = obj.toJSONString();
-                    JSONParser parser = new JSONParser();
-                    JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
-                    jsonObject.put("skyflow_id", skyflow_id);
-                    resultList[i] = jsonObject;
-                }
+                    @Override
+                    public void cancelled() {
+                        semaphore.release();
+                        logger.info("API-RESP-CANCEL " + partitionId + " " + requestId + " failed on " + requestId);
+                        future.completeExceptionally(new CancellationException("Request cancelled"));
+                    }
+                });
             } else {
-                int i = 0;
-                i=0;
+                List<Row> resultList = new ArrayList<>();
                 for (String json : jsons) {
                     //System.out.println(" ("+ partitionId + ") recv: " + json);
                     T obj = clazz.getConstructor(String.class).newInstance(json);
@@ -278,23 +310,27 @@ public class EmrTask {
                     JSONParser parser = new JSONParser();
                     JSONObject jsonObject = (JSONObject) parser.parse(objectJson);
                     jsonObject.put("skyflow_id", "skipped");
-                    resultList[i] =jsonObject;
-                    i = i + 1;
+                    TreeMap<String, Object> sortedMap = new TreeMap<>(jsonObject);
+                    resultList.add(RowFactory.create(sortedMap.values().toArray()));
                 }
+
+                semaphore.release();
+                future.complete(resultList);
             }
 
-            return resultList;
+            return future;
         }
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("EMRTask Version 7");
+        System.out.println("EMRTask Version 8");
 
-        if (args.length < 17) {
-            System.err.println("Usage: " + EmrTask.class.getName()
+        if (args.length != 18) {
+            System.err.println("Usage: " + EmrTask.class.getName() + " "
                     + "<localIO> "
                     + "<full.java.class> "
                     + "<num-processing-partitions> "
+                    + "<num-concurrent-requests> "
                     + "<output-s3-bucket> "
                     + "<table-name> "
                     + "<kafka-bootstrap> "
@@ -308,12 +344,14 @@ public class EmrTask {
                     + "<vault-batch-size> "
                     + "<short-circuit-skyflow?> "
                     + "<namespace> "
-                    + "<reporting-delay-secs>"
+                    + "<reporting-delay-secs> "
                     );
             System.err.println("Pipeline Type:");
             System.err.println("  <localIO>               : A boolean flag to determine if input comes from plaintext kafka. Spark runs locally.");
             System.err.println("  <full.java.class>       : The fully qualified Java class name of the object being processed");
-            System.err.println("  <num-processing-partitions>: The number of partitions for processing.");
+            System.err.println("Parallelism Instructions:");
+            System.err.println("  <num-processing-partitions>: The number of partitions for processing. (temporarily disabled)");
+            System.err.println("  <num-concurrent-requests>: The number of concurrent API requests.");
             System.err.println("Output Instructions:");
             System.err.println("  <output-s3-bucket>      : The S3 bucket where the output will be stored.");
             System.err.println("  <table-name>            : The name of the table to be used in the process.");
@@ -339,25 +377,28 @@ public class EmrTask {
         @SuppressWarnings("unchecked")
         Class<? extends SerializableDeserializable> clazz = (Class<? extends SerializableDeserializable>) Class.forName(args[1]);
         int numProcessingPartitions = Integer.parseInt(args[2]);
-        String outputBucket = args[3];
-        String tableName = args[4];
-        String kafkaBootstrap = args[5];
-        String kafkaTopic = String.format("%s-%s",args[6],clazz.getSimpleName());
-        int kafkaBatchSize = Integer.parseInt(args[7]);
-        int microBatchSeconds = Integer.parseInt(args[8]);
-        String awsRegion = args[9];
-        String secretName = args[10];
-        String vault_id = args[11];
-        String vault_url = args[12];
-        int vaultBatchSize = Integer.parseInt(args[13]);
-        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[14]);
-        String cloudwatchNamespace = args[15];
-        int reportingDelaySecs = Integer.parseInt(args[16]);
+        int numConcurrentRequests = Integer.parseInt(args[3]);
+        String outputBucket = args[4];
+        String tableName = args[5];
+        String kafkaBootstrap = args[6];
+        String kafkaTopic = String.format("%s-%s",args[7],clazz.getSimpleName());
+        int kafkaBatchSize = Integer.parseInt(args[8]);
+        int microBatchSeconds = Integer.parseInt(args[9]);
+        String awsRegion = args[10];
+        String secretName = args[11];
+        String vault_id = args[12];
+        String vault_url = args[13];
+        int vaultBatchSize = Integer.parseInt(args[14]);
+        boolean shortCircuitSkyflow = Boolean.parseBoolean(args[15]);
+        String cloudwatchNamespace = args[16];
+        int reportingDelaySecs = Integer.parseInt(args[17]);
         // For sanity checking, print out all the gathered args
         System.out.println("Pipeline Type:");
         System.out.println("  Local IO: " + localIO);
         System.out.println("  Class: " + clazz.getName());
+        System.err.println("Parallelism Instructions:");
         System.out.println("  Num Processing Partitions: " + numProcessingPartitions);
+        System.out.println("  Num Concurrent Requests: " + numConcurrentRequests);
         System.out.println("Output Instructions:");
         System.out.println("  Output Bucket: " + outputBucket);
         System.out.println("  Table Name: " + tableName);
@@ -418,6 +459,7 @@ public class EmrTask {
             reportingDelaySecs,
             clazz,
             vaultBatchSize,
+            numConcurrentRequests,
             vault_id,
             vault_url,
             credentialString,
@@ -548,13 +590,15 @@ public class EmrTask {
         hudiOptions.put("hoodie.table.name", hudiTableName);
         hudiOptions.put("hoodie.datasource.write.operation", "upsert");
         hudiOptions.put("hoodie.datasource.hive_sync.enable", "false");
-        hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ");
+        hudiOptions.put("hoodie.datasource.write.table.type", "COPY_ON_WRITE"); // Temp, for Abhishek
+        hudiOptions.put("hoodie.datasource.write.hive_style_partitioning", "true");
+        hudiOptions.put("hoodie.datasource.write.drop.partition.columns", "true");
 
         HudiConfig hudiConfigAnn = clazz.getAnnotation(HudiConfig.class);
         if (hudiConfigAnn == null) {
             throw new RuntimeException("HudiConfig annotation is missing on the class: " + clazz.getName());
         }
-        //hudiOptions.put("hoodie.datasource.write.partitionpath.field", hudiConfigAnn.partitionpathkey_field());
+        hudiOptions.put("hoodie.datasource.write.partitionpath.field", hudiConfigAnn.partitionpathkey_field());
         hudiOptions.put("hoodie.datasource.write.recordkey.field", hudiConfigAnn.recordkey_field());
         hudiOptions.put("hoodie.datasource.write.precombine.field", hudiConfigAnn.precombinekey_field());
 

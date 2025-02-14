@@ -1,8 +1,6 @@
 
 package com.skyflow.walmartpoc;
 
-import java.util.UUID;
-
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
@@ -11,7 +9,7 @@ import com.skyflow.iface.VaultColumn;
 import com.skyflow.iface.VaultObject;
 
 @VaultObject("customerpaymentdetails")
-@HudiConfig(recordkey_field="paymentID",precombinekey_field="lastupdate_ts")
+@HudiConfig(recordkey_field="paymentID",precombinekey_field="lastupdate_ts",partitionpathkey_field="cardHolderZip")
 public class PaymentInfo implements SerializableDeserializable {
     @VaultColumn(upsertColumn=true) String paymentID;
     String custID;
@@ -34,7 +32,7 @@ public class PaymentInfo implements SerializableDeserializable {
 
 
     PaymentInfo(Customer customer, Faker faker) {
-        this.paymentID = UUID.randomUUID().toString();
+        this.paymentID = UUIDt6.generateType6UUID().toString();
         this.custID = customer.custID;
         this.creditCardNumber = faker.finance().creditCard().replaceAll("-", "");
         this.cardExpiry = String.format("%02d/%d", faker.number().numberBetween(1, 12), faker.number().numberBetween(2024, 2030));

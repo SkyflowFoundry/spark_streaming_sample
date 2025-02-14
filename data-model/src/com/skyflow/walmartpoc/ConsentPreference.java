@@ -8,7 +8,7 @@ import java.util.Random;
 
 import com.github.javafaker.Faker;
 
-@HudiConfig(recordkey_field="startIDValue",precombinekey_field="lastupdate_ts")
+@HudiConfig(recordkey_field="startIDValue",precombinekey_field="lastupdate_ts",partitionpathkey_field="domain")
 public class ConsentPreference implements SerializableDeserializable {
     String startIDType;
     String startIDValue;

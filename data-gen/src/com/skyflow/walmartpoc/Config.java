@@ -8,7 +8,6 @@ import org.yaml.snakeyaml.Yaml;
 
 public class Config {
     public static class SeedData {
-        public String output_directory;
         public String customers_file;
         public String payments_file;
         public String catalog_file;

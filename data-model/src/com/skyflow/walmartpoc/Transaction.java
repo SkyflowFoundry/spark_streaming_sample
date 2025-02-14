@@ -4,7 +4,7 @@ import com.github.javafaker.Faker;
 import com.skyflow.iface.VaultColumn;
 import com.skyflow.iface.VaultObject;
 
-@HudiConfig(recordkey_field="orderID",precombinekey_field="lastupdate_ts")
+@HudiConfig(recordkey_field="orderID",precombinekey_field="lastupdate_ts",partitionpathkey_field="sku_id")
 @VaultObject("transaction")
 public class Transaction implements SerializableDeserializable {
     @VaultColumn String customerID;

@@ -2,7 +2,6 @@ package com.skyflow.walmartpoc;
 
 import java.util.List;
 import java.util.Random;
-import java.util.UUID;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -14,7 +13,7 @@ import com.skyflow.iface.VaultColumn;
 import com.skyflow.iface.VaultObject;
 
 @VaultObject("customeraccount")
-@HudiConfig(recordkey_field="custID",precombinekey_field="lastupdate_ts")
+@HudiConfig(recordkey_field="custID",precombinekey_field="lastupdate_ts",partitionpathkey_field="zip")
 public class Customer implements SerializableDeserializable {
     @VaultColumn(value="customerid",upsertColumn=true) String custID;
     @VaultColumn String firstName;
@@ -32,7 +31,7 @@ public class Customer implements SerializableDeserializable {
     Long lastupdate_ts;
 
     Customer(Faker faker, List<CountryZipCityState> addressHelper) {
-        this.custID = UUID.randomUUID().toString();
+        this.custID = UUIDt6.generateType6UUID().toString();
         Name name = faker.name();
         this.firstName = name.firstName();
         this.lastName = name.lastName();

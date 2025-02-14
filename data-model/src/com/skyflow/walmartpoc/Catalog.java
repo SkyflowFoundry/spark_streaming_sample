@@ -2,7 +2,7 @@ package com.skyflow.walmartpoc;
 
 import com.github.javafaker.Faker;
 
-@HudiConfig(recordkey_field="sku_id",precombinekey_field="lastupdate_ts")
+@HudiConfig(recordkey_field="sku_id",precombinekey_field="lastupdate_ts",partitionpathkey_field="MHMD_flag")
 public class Catalog implements SerializableDeserializable {
     String sku_id;
     String category;

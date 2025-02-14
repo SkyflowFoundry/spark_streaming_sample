@@ -29,7 +29,7 @@ public class UpsertGenerator {
     private final float email_change_probability;
     private final float mhmd_yes_fraction;
 
-    public UpsertGenerator(Config config, String outputDir) throws IOException, CsvValidationException {
+    public UpsertGenerator(Config config, String outputDir, CollectorAndReporter stats) throws IOException, CsvValidationException {
         insert_probability = config.upsert_probabilities.insert_probability;
         email_change_probability = config.upsert_probabilities.email_change_probability;
         street_address_change_probability = config.upsert_probabilities.street_address_change_probability;
@@ -38,9 +38,11 @@ public class UpsertGenerator {
         czcs = CountryZipCityState.loadData("US.tsv");
 
         seeded_catalog = CsvReader.readCsvFile(Catalog.class, Paths.get(outputDir, config.seed_data.catalog_file), Catalog.getCsvHeader());
-
+        logger.info("Read {} Catalog items", seeded_catalog.length);
         seeded_customers = CsvReader.readCsvFile(Customer.class, Paths.get(outputDir, config.seed_data.customers_file), Customer.getCsvHeader());
+        logger.info("Read {} Customer items", seeded_customers.length);
         seeded_payments = CsvReader.readCsvFile(PaymentInfo.class, Paths.get(outputDir, config.seed_data.payments_file), PaymentInfo.getCsvHeader());
+        logger.info("Read {} PaymentInfo",seeded_payments.length);
     }
 
     public Customer getCustomer() {
@@ -55,6 +57,7 @@ public class UpsertGenerator {
             int randomIndex = random.nextInt(seeded_customers.length);
             customer = seeded_customers[randomIndex];
 
+            r = random.nextFloat();
             // Determine if we should change the street address or email based on probabilities
             if (r < street_address_change_probability) {
                 // Change street address
@@ -67,6 +70,7 @@ public class UpsertGenerator {
             } else {
                 // no change!
             }
+            customer.lastupdate_ts = System.currentTimeMillis();
         }
 
         return customer;
@@ -86,6 +90,7 @@ public class UpsertGenerator {
             int randomIndex = random.nextInt(seeded_payments.length);
             paymentInfo = seeded_payments[randomIndex];
 
+            r = random.nextFloat();
             // Determine if we should change the street address or email based on probabilities
             if (r < street_address_change_probability) {
                 // Change street address
@@ -98,6 +103,7 @@ public class UpsertGenerator {
             } else {
                 // no change!
             }
+            paymentInfo.lastupdate_ts = System.currentTimeMillis();
         }
 
         return paymentInfo;
@@ -116,7 +122,7 @@ public class UpsertGenerator {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 9) {
+        if (args.length != 9) {
             System.err.println("Usage: java " + UpsertGenerator.class.getName() + " <runLocally> <configFilePath> <load-shape> <outputDir> <kafka-bootstrap> <kafka-topic-base> <kafka-partitions> <namespace> <reporting-delay-secs>");
             System.err.println("Generation Instructions:");
             System.err.println("  <runLocally>            : Run locally (write to plaintext Kafka)");
@@ -144,14 +150,19 @@ public class UpsertGenerator {
         String namespace = args[7];
         int reportingDelaySecs = Integer.parseInt(args[8]);
 
+        //System.out.println("Args gathered");
         Config config = Config.load(configFilePath);
 
-        UpsertGenerator generator = new UpsertGenerator(config, outputDir);
-
+        //System.out.println("Starting stats & publishers");
         try (CollectorAndReporter stats = new CollectorAndReporter(namespace, reportingDelaySecs*1000);
              KafkaPublisher<Customer> customerPublisher = new KafkaPublisher<>(Customer.class, runLocally, kafkaBootstrap, kafkaTopicBase, kafkaPartitions, stats);
              KafkaPublisher<PaymentInfo> paymentPublisher = new KafkaPublisher<>(PaymentInfo.class, runLocally, kafkaBootstrap, kafkaTopicBase, kafkaPartitions, stats);
              KafkaPublisher<Transaction> transactionPublisher = new KafkaPublisher<>(Transaction.class, runLocally, kafkaBootstrap, kafkaTopicBase, kafkaPartitions, stats);) {
+
+            //System.out.println("Starting generator");
+            UpsertGenerator generator = new UpsertGenerator(config, outputDir, stats);
+
+            //System.out.println("Starting load");
             long totalItems = LoadRunner.run(loadShape, new Runnable() {
                 @Override
                 public void run() {

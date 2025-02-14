@@ -8,7 +8,24 @@ import com.google.common.util.concurrent.RateLimiter;
 public class LoadRunner {
     private static final int FALL_BEHIND_MARGIN_PCT=10;
     private static final Logger logger = LoggerFactory.getLogger(LoadRunner.class);
+    
+    @SuppressWarnings("restriction")
+    public static void terminateOnInterruption() {
+        // Register the signal handler for SIGHUP & SIGINT, if possible (needed on Linux machines; not on local Mac)
+        try {
+            sun.misc.Signal.handle(new sun.misc.Signal("HUP"), signal -> {
+                System.out.println("SIGHUP received. Shutting down...");
+                // Perform cleanup tasks if necessary
+                System.exit(0); // Terminate the application
+            });
+            sun.misc.Signal.handle(new sun.misc.Signal("INT"), signal -> {
+                System.out.println("SIGINT received. Shutting down...");
+                // Perform cleanup tasks if necessary
+                System.exit(0); // Terminate the application
+            });
+        } finally {}
         
+    }
     public static long run(String loadShape, Runnable operation) {
         if (!loadShape.matches("^(\\d+(\\.\\d+)?,\\d+;)*(\\d+(\\.\\d+)?,\\d+)$")) {
             throw new IllegalArgumentException("Invalid load shape format. Expected format: 'rate,mins;rate,mins;...'");
@@ -57,5 +74,28 @@ public class LoadRunner {
                 }
             }
         }
+        logger.info("Ran for {} minutes",(System.currentTimeMillis() - startTime)/1000.0/60);
+    }
+    public static int getNumber(String generationLoadShape) {
+        if (!generationLoadShape.matches("^(\\d+(\\.\\d+)?,\\d+;)*(\\d+(\\.\\d+)?,\\d+)$")) {
+            throw new IllegalArgumentException("Invalid generation load shape format. Expected format: 'rate,mins;rate,mins;...'");
+        }
+
+        int totalIterations = 0;
+        String[] loadShapeParts = generationLoadShape.split(";");
+        for (String part : loadShapeParts) {
+            String[] rateAndMins = part.split(",");
+            if (rateAndMins.length != 2) {
+                throw new RuntimeException("Got invalid loadshape part: " + part);
+            }
+            try {
+                double rate = Double.parseDouble(rateAndMins[0].trim());
+                int mins = Integer.parseInt(rateAndMins[1].trim());
+                totalIterations += (int)(rate * mins * 60);
+            } catch (NumberFormatException e) {
+                logger.error("Invalid number format in generation load shape: " + part, e);
+            }
+        }
+        return totalIterations;
     }
 }

@@ -2,11 +2,6 @@ package com.skyflow.walmartpoc;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Properties;
-
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,45 +11,16 @@ import com.github.javafaker.Faker;
 public class KafkaCustomerPublisher {
     private static final Logger logger = LoggerFactory.getLogger(KafkaCustomerPublisher.class);
 
-    final KafkaProducer<String, String> producer;
-    final String topic;
-    final Faker faker;
-    final List<CountryZipCityState> czcs;
-    final CollectorAndReporter stats;
-
-    KafkaCustomerPublisher(String brokerServer, String topic,
-                           Faker faker, List<CountryZipCityState> czcs,
-                           CollectorAndReporter stats) {
-        Properties props = new Properties();
-        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerServer);
-        props.put(ProducerConfig.ACKS_CONFIG, "all");
-        props.put(ProducerConfig.RETRIES_CONFIG, 0);
-        props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 100000);
-        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-        // AWS MSK specific config
-        props.put("security.protocol", "SASL_SSL");
-        props.put("sasl.mechanism", "AWS_MSK_IAM");
-        props.put("sasl.jaas.config", "software.amazon.msk.auth.iam.IAMLoginModule required;");
-        props.put("sasl.client.callback.handler.class", "software.amazon.msk.auth.iam.IAMClientCallbackHandler");
-
-        this.topic = topic;
-        this.faker = faker;
-        this.czcs = czcs;
-        this.stats = stats;
-
-        producer = new KafkaProducer<>(props);
-    }
-
     public static void main(String[] args) throws Exception {
-        if (args.length < 6) {
-            System.err.println("Usage: " + KafkaCustomerPublisher.class.getName() + " <load-shape> <kafka-bootstrap> <kafka-topic> <kafka-partitions> <namespace> <reporting-delay-secs>");
+        if (args.length != 7) {
+            System.err.println("Usage: " + KafkaCustomerPublisher.class.getName() + " <run-locally> <load-shape> <kafka-bootstrap> <kafka-topic> <kafka-partitions> <namespace> <reporting-delay-secs>");
             System.err.println("Generation Instructions:");
+            System.err.println("  <run-locally>           : Run locally (true/false).");
             System.err.println("  <load-shape>            : Semicolon separated list of rate,mins pairs: ");
             System.err.println("                              generate 'rate' (double) records for 'mins' (int) minutes");
             System.err.println("Output Instructions:");
             System.err.println("  <kafka-bootstrap>       : The Kafka bootstrap server address.");
-            System.err.println("  <kafka-topic>           : The Kafka topic to subscribe to.");
+            System.err.println("  <kafka-topic-base>      : The base of the Kafka topic to subscribe to.");
             System.err.println("  <kafka-partitions>      : Comma separated partition numbers to round-robin to.");
             System.err.println("                              Can be empty string, meaning all partitions");
             System.err.println("Metrics Instructions:");
@@ -63,26 +29,29 @@ public class KafkaCustomerPublisher {
             System.exit(1);
         }
 
-        String loadShape = args[0];
-        String brokerServer = args[1];
-        String topicName = args[2];
-        String kafkaPartitions = args[3];
-        String cloudwatchNamespace = args[4];
-        int reportingDelaySecs = Integer.parseInt(args[5]);
+        boolean runLocally = Boolean.parseBoolean(args[0]);
+        String loadShape = args[1];
+        String brokerServer = args[2];
+        String topicBase = args[3];
+        String kafkaPartitions = args[4];
+        String cloudwatchNamespace = args[5];
+        int reportingDelaySecs = Integer.parseInt(args[6]);
 
         System.setProperty("org.slf4j.simpleLogger.showDateTime", "true");
         System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "yyyy-MM-dd HH:mm:ss");
         System.setProperty("org.slf4j.simpleLogger.logFile", "System.out");
         System.setProperty("org.slf4j.simpleLogger.log.org.slf4j.MDC", "instanceId");
         logger.info("Broker: " + brokerServer);
-        logger.info("Topic: " + topicName);
+        logger.info("Topic: " + topicBase);
+
+        LoadRunner.terminateOnInterruption();
 
         // Initialize Faker & supporting stuff
         List<CountryZipCityState> czcs = CountryZipCityState.loadData("US.tsv");
         Faker faker = new Faker();
 
         try (CollectorAndReporter stats = new CollectorAndReporter(cloudwatchNamespace, reportingDelaySecs*1000);
-                KafkaPublisher<Customer> customerPublisher = new KafkaPublisher<>(Customer.class, false, brokerServer, topicName, kafkaPartitions, stats);) {
+                KafkaPublisher<Customer> customerPublisher = new KafkaPublisher<>(Customer.class, runLocally, brokerServer, topicBase, kafkaPartitions, stats);) {
             long totalItems = LoadRunner.run(loadShape, new Runnable() {
                 @Override
                 public void run() {

@@ -12,8 +12,8 @@ public class GenCatalog {
     private static final Logger logger = LoggerFactory.getLogger(GenCatalog.class);
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 9) {
-            System.err.println("Usage: java " + GenCatalog.class.getName() + " <configFilePath> <load-shape> <outputDir> <kafka-bootstrap> <kafka-topic-base> <kafka-partitions> <namespace> <reporting-delay-secs>");
+        if (args.length != 9) {
+            System.err.println("Usage: java " + GenCatalog.class.getName() + " <runLocally> <configFilePath> <load-shape> <outputDir> <kafka-bootstrap> <kafka-topic-base> <kafka-partitions> <namespace> <reporting-delay-secs>");
             System.err.println("Generation Instructions:");
             System.err.println("  <runLocally>            : Run locally (write to plaintext Kafka)");
             System.err.println("  <configFilePath>        : Path to config.yml file ");

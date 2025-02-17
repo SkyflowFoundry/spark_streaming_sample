@@ -2,7 +2,6 @@
 
 ## Requirements
 - JDK version 1.8. strictly 1.8. Don't get a later version. Or earlier.
-- Scala > 2.12 (Scala 3 confirmed)
 - Maven
 - Vault (schema in `vaultSchema.json`)
 - Service accounts with Vault Editor role

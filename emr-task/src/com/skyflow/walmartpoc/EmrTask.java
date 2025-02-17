@@ -590,15 +590,16 @@ public class EmrTask {
         hudiOptions.put("hoodie.table.name", hudiTableName);
         hudiOptions.put("hoodie.datasource.write.operation", "upsert");
         hudiOptions.put("hoodie.datasource.hive_sync.enable", "false");
-        hudiOptions.put("hoodie.datasource.write.table.type", "COPY_ON_WRITE"); // Temp, for Abhishek
+        hudiOptions.put("hoodie.datasource.write.table.type", "MERGE_ON_READ"); // Better for write performance
+        //hudiOptions.put("hoodie.datasource.write.table.type", "COPY_ON_WRITE"); // ... but, for Abhishek
         hudiOptions.put("hoodie.datasource.write.hive_style_partitioning", "true");
-        hudiOptions.put("hoodie.datasource.write.drop.partition.columns", "true");
+        //hudiOptions.put("hoodie.datasource.write.drop.partition.columns", "true");
 
         HudiConfig hudiConfigAnn = clazz.getAnnotation(HudiConfig.class);
         if (hudiConfigAnn == null) {
             throw new RuntimeException("HudiConfig annotation is missing on the class: " + clazz.getName());
         }
-        hudiOptions.put("hoodie.datasource.write.partitionpath.field", hudiConfigAnn.partitionpathkey_field());
+        //hudiOptions.put("hoodie.datasource.write.partitionpath.field", hudiConfigAnn.partitionpathkey_field());
         hudiOptions.put("hoodie.datasource.write.recordkey.field", hudiConfigAnn.recordkey_field());
         hudiOptions.put("hoodie.datasource.write.precombine.field", hudiConfigAnn.precombinekey_field());
 

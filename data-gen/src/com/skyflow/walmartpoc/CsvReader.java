@@ -79,7 +79,7 @@ public class CsvReader<T extends SerializableDeserializable> implements AutoClos
 
     public static <T extends SerializableDeserializable> T[] readCsvFile(Class<T> clazz, Path path, String[] csvHeader ) throws CsvValidationException, IOException {
     try (CsvReader<T> csvReader = new CsvReader<T>(clazz, path, csvHeader);) {
-        List<T> l = new ArrayList<>(5000000);
+        List<T> l = new ArrayList<>(1000000); // Horribly inefficient way to do this. Works for our small scale though.
         for (T c : csvReader) {
             l.add(c);
         }

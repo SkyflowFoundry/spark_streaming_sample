@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -111,24 +110,20 @@ public class GenCustomer {
             Random random = new Random();
 
             {
-                List<CompletableFuture<String>> futures = new ArrayList<>(insertPhaseIterations);
                 long totalItems = LoadRunner.run(generationLoadShape, new Runnable() {
                     @Override
                     public void run() {
                         Customer customer = new Customer(faker, czcs);
                         customers.add(customer);
-                        CompletableFuture<String> future = loader.loadObjectIntoVault(customer, true);
+                        loader.loadObjectIntoVault(customer, true);
                         inserts.increment();
-                        futures.add(future);
                         stats.pollAndReport(false);
                     }                
                 });
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
                 logger.info("Created {} Customers",totalItems);
             }
 
             {
-                List<CompletableFuture<String>> futures = new ArrayList<>(LoadRunner.getNumber(upsertLoadShape));
                 int numCustomers = customers.size();
                 long totalItems = LoadRunner.run(upsertLoadShape, new Runnable() {
                     @Override
@@ -164,13 +159,11 @@ public class GenCustomer {
                             }
                             customer.lastupdate_ts = System.currentTimeMillis();
                         }
-                        CompletableFuture<String> future = loader.loadObjectIntoVault(customer, true);
+                        loader.loadObjectIntoVault(customer, true);
                         datum.increment();
-                        futures.add(future);
                         stats.pollAndReport(false);
                     }                
                 });
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
                 logger.info("Upserted {} Customers",totalItems);
             }
         }

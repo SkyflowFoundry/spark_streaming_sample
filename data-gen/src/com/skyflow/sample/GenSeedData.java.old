@@ -1,0 +1,179 @@
+package com.skyflow.sample;
+
+import java.io.FileWriter;
+import java.lang.reflect.Array;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.Random;
+
+import com.github.javafaker.Faker;
+import com.opencsv.CSVWriter;
+
+public class GenSeedData {
+
+    public static void main(String[] args) throws Exception {
+        if (args.length < 2) {
+            System.out.println("Usage: java GenSeedData <configFilePath> <outputDir>");
+            System.exit(1);
+        }
+        String configFilePath = args[0];
+        String outputDir = args[1];
+
+        Config config = Config.load(configFilePath);
+
+        // Ensure output directory exists
+        Files.createDirectories(Paths.get(outputDir));
+
+        try (CSVWriter customerWriter = new CSVWriter(new FileWriter(Paths.get(outputDir, config.seed_data.customers_file).toString()));
+             CSVWriter paymentWriter = new CSVWriter(new FileWriter(Paths.get(outputDir, config.seed_data.payments_file).toString()));
+             CSVWriter catalogWriter = new CSVWriter(new FileWriter(Paths.get(outputDir, config.seed_data.catalog_file).toString()));
+             CSVWriter transactionWriter = new CSVWriter(new FileWriter(Paths.get(outputDir, config.seed_data.transactions_file).toString()));
+             CSVWriter consentWriter = new CSVWriter(new FileWriter(Paths.get(outputDir, config.seed_data.consent_file).toString()));
+             CSVWriter tokenizedcustomerWriter = new CSVWriter(new FileWriter(Paths.get(outputDir, config.seed_data.tokenized_customers_file).toString()));
+             CSVWriter tokenizedpaymentWriter = new CSVWriter(new FileWriter(Paths.get(outputDir, config.seed_data.tokenized_payments_file).toString()));) {
+                gen_and_write_seeded_data(config,
+                    customerWriter, tokenizedcustomerWriter,
+                    paymentWriter, tokenizedpaymentWriter,
+                    catalogWriter,
+                    transactionWriter,
+                    consentWriter);
+                System.out.println("Data generation completed.");
+             }
+    }
+
+    public static <T> T[] addElementToBeginning(T[] originalArray, T newElement) {
+        int newLength = originalArray.length + 1;
+        @SuppressWarnings("unchecked")
+        T[] newArray = (T[]) Array.newInstance(originalArray.getClass().getComponentType(), newLength);
+
+        newArray[0] = newElement;
+        System.arraycopy(originalArray, 0, newArray, 1, originalArray.length);
+
+        return newArray;
+    }
+
+    static Catalog[] gen_and_write_catalog(Config config, Faker faker, CSVWriter catalogWriter) {
+        catalogWriter.writeNext(Catalog.getCsvHeader());
+
+        int catalogCount = config.seed_data.total_catalog_size;
+        Catalog[] catalogArray = new Catalog[catalogCount];
+        for (int i = 0; i < catalogCount; i++) {
+            Catalog catalogItem = new Catalog(faker);
+            catalogArray[i] = catalogItem;
+
+            // Write Catalog Data to CSV
+            catalogWriter.writeNext(catalogItem.toCsvRecord());
+        }
+        return catalogArray;
+    }
+
+    private static void gen_transactions(Config config, Faker faker, Random random, Catalog[] catalog, Customer customer, CSVWriter transactionWriter) {
+        int transactionCount;
+        float zeroTxnProb = config.fake_data.zero_txn_fraction;
+        float twoTxnProb = config.fake_data.two_txn_fraction;
+        float randomValue = random.nextFloat();
+
+        if (randomValue < zeroTxnProb) {
+            transactionCount = 0;
+        } else if (randomValue < zeroTxnProb + twoTxnProb) {
+            transactionCount = 2;
+        } else {
+            transactionCount = 10;
+        }
+
+        for (int i = 0; i < transactionCount; i++) {
+            Transaction transaction = new Transaction(customer, catalog[random.nextInt(catalog.length)], faker);
+
+            // Write Transaction Data to CSV
+            transactionWriter.writeNext(transaction.toCsvRecord());
+        }
+    }
+
+    static void gen_and_write_seeded_data(Config config,
+                CSVWriter customerWriter, CSVWriter tokenizedCustomerWriter,
+                CSVWriter paymentWriter, CSVWriter tokenizedPaymentWriter,
+                CSVWriter catalogWriter,
+                CSVWriter transactionWriter,
+                CSVWriter consentWriter
+                ) throws Exception {
+        // Initialize Faker & supporting stuff
+        Random random = new Random();
+        List<CountryZipCityState> czcs = CountryZipCityState.loadData("US.tsv");
+        Faker faker = new Faker();
+
+        Catalog[] catalog = gen_and_write_catalog(config, faker, catalogWriter);
+        System.err.println("Generated catalog of len " + catalog.length + " e.g.: " + catalog[0]);
+
+        int customerCount = config.seed_data.total_customer_count;
+        float one_card_fraction = config.fake_data.one_card_fraction;
+        float two_card_fraction = config.fake_data.two_card_fraction;
+
+        // If required, initialize vault loader
+        VaultDataLoader<Customer> customer_loader = null;
+        VaultDataLoader<PaymentInfo> payments_loader = null;
+        TokenProvider tokenProvider = new TokenProvider(new String(Files.readAllBytes(Paths.get(config.vault.private_key_file))));
+        if (config.seed_data.load_to_vault) {
+            customer_loader = new VaultDataLoader<>(config.vault.vault_id, config.vault.vault_url, config.vault.max_rows_in_batch,
+                                                    tokenProvider, Customer.class);
+            payments_loader = new VaultDataLoader<>(config.vault.vault_id, config.vault.vault_url, config.vault.max_rows_in_batch,
+                                                    tokenProvider, PaymentInfo.class);
+        }
+
+        // Write headers
+        customerWriter.writeNext(Customer.getCsvHeader());
+        tokenizedCustomerWriter.writeNext(addElementToBeginning(Customer.getCsvHeader(), "skyflow_id"));
+        paymentWriter.writeNext(PaymentInfo.getCsvHeader());
+        tokenizedPaymentWriter.writeNext(addElementToBeginning(PaymentInfo.getCsvHeader(), "skyflow_id"));
+        transactionWriter.writeNext(Transaction.getCsvHeader());
+        consentWriter.writeNext(ConsentPreference.getCsvHeader());
+
+        for (int i = 0; i < customerCount; i++) {
+            // Generate Customer Data
+            Customer customer = new Customer(faker, czcs);
+            // Write Customer Data to CSV
+            customerWriter.writeNext(customer.toCsvRecord(), true);
+            // Determine number of payment cards
+            int paymentCardCount;
+            int percentage = random.nextInt(100) + 1; // 1 to 100
+            if (percentage <= 100*one_card_fraction) {
+                paymentCardCount = 1;
+            } else if (percentage <= 100*(one_card_fraction+two_card_fraction)) {
+                paymentCardCount = 2;
+            } else {
+                paymentCardCount = 3;
+            }
+
+            for (int j = 0; j < paymentCardCount; j++) {
+                // Generate Payment Card Data
+                PaymentInfo paymentInfo = new PaymentInfo(customer, faker);
+
+                // Write Payment Card Data to CSV
+                paymentWriter.writeNext(paymentInfo.toCsvRecord(), true);
+
+                // Load data into the vault
+                if (payments_loader!=null) {
+                    String payment_skyflow_id = payments_loader.loadObjectIntoVault(paymentInfo);
+                    tokenizedPaymentWriter.writeNext(addElementToBeginning(paymentInfo.toCsvRecord(), payment_skyflow_id), true);
+                }
+
+            }
+
+            gen_transactions(config, faker, random, catalog, customer, transactionWriter);
+
+            // Load data into vault
+            if (customer_loader!=null) {
+                String customer_skyflow_id = customer_loader.loadObjectIntoVault(customer);
+                tokenizedCustomerWriter.writeNext(addElementToBeginning(customer.toCsvRecord(),customer_skyflow_id), true);
+
+                ConsentPreference consent = new ConsentPreference("custID", customer.custID, "skyflow_id", customer_skyflow_id, faker);
+                consentWriter.writeNext(consent.toCsvRecord(), true);
+            }
+
+            // Progress indicator
+            if ((i + 1) % 10 == 0) {
+                System.out.println("Generated " + (i + 1) + " customers.");
+            }
+        }
+    }
+}

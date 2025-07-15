@@ -88,7 +88,7 @@
             {
               "name": "skyflow.options.description",
               "values": [
-                "customer id from walmart. uuid. unique. used for upserts"
+                "customer id from SampleCorp. uuid. unique. used for upserts"
               ]
             },
             {
@@ -1039,7 +1039,7 @@
             {
               "name": "skyflow.options.description",
               "values": [
-                "payment id from Walmart, which is a UUID. Unique key, used for upserts"
+                "payment id from SampleCorp, which is a UUID. Unique key, used for upserts"
               ]
             },
             {

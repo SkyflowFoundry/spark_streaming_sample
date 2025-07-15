@@ -1,12 +1,32 @@
 # Project Setup and Running Instructions
 
-## Requirements
+## Quick Start: Build Everything with Docker (No Java/Maven Needed Locally)
+
+This project is now a Maven multi-module build. You can build all modules at once using Docker:
+
+```sh
+docker run --rm -v "$PWD":/usr/src/mymaven -w /usr/src/mymaven maven:3.9.6-eclipse-temurin-17 mvn clean install
+```
+- This will compile, test, and package all modules using the top-level parent POM.
+- No need to install Java or Maven on your machine.
+
+## Multi-Module Maven Structure
+- The top-level `pom.xml` is a parent POM that aggregates all modules: `utils`, `data-model`, `data-gen`, and `emr-task`.
+- All modules inherit configuration and dependency versions from the parent.
+- Inter-module dependencies are managed automatically.
+- You can still build individual modules as before (see below), but the recommended approach is to use the top-level build.
+
+---
+
+## Requirements (for advanced/manual builds)
 - JDK version 1.8. strictly 1.8. Don't get a later version. Or earlier.
 - Maven
 - Vault (schema in `vaultSchema.json`)
 - Service accounts with Vault Editor role
 - AWS Account with sufficient privileges (even if you run locally, you need AWS secrets manager)
 - Docker (if you wanna test locally; non-needed otherwise)
+
+---
 
 ## Project Modules
 
@@ -87,10 +107,10 @@ spark-submit \
     --jars emr-task/target/emr-task-1.0.0-jar-with-dependencies.jar \
     --repositories https://repo1.maven.org/maven2 \
     --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3 \
-    --class com.skyflow.walmartpoc.EmrTask \
+    --class com.skyflow.sample.EmrTask \
     emr-task/target/emr-task-1.0.0.jar \
       true \
-      com.skyflow.walmartpoc.Customer \
+      com.skyflow.sample.Customer \
       `pwd`/hudi customertbl \
       localhost:29092 local 5 5 \
       ${AWS_REGION} ${AWS_SECRET_NAME_FOR_SA_API_KEY} \

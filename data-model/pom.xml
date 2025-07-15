@@ -3,13 +3,17 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.skyflow.walmartpoc</groupId>
+    <parent>
+        <groupId>com.skyflow</groupId>
+        <artifactId>spark-streaming-sample</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
     <artifactId>DataModel</artifactId>
-    <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>DataModel</name>
-    <description>The Data Model for the Walmart project</description>
+    <description>The Data Model for the sample project</description>
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
@@ -45,9 +49,9 @@
             <version>${slf4j.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.skyflow.walmartpoc</groupId>
+            <groupId>com.skyflow</groupId>
             <artifactId>Utils</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>${project.version}</version>
         </dependency>
     </dependencies>
 

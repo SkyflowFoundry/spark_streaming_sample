@@ -4,9 +4,13 @@
          https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.skyflow.warmartpoc</groupId>
+  <parent>
+    <groupId>com.skyflow</groupId>
+    <artifactId>spark-streaming-sample</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
   <artifactId>emr-task</artifactId>
-  <version>1.0.0</version>
   <packaging>jar</packaging>
 
   <properties>
@@ -196,9 +200,9 @@
     </dependency>
 
     <dependency>
-      <groupId>com.skyflow.walmartpoc</groupId>
+      <groupId>com.skyflow</groupId>
       <artifactId>DataModel</artifactId>
-      <version>1.0-SNAPSHOT</version>
+      <version>${project.version}</version>
       <exclusions>
         <exclusion>
           <groupId>org.slf4j</groupId>
@@ -207,9 +211,9 @@
       </exclusions>
     </dependency>
     <dependency>
-        <groupId>com.skyflow.walmartpoc</groupId>
+        <groupId>com.skyflow</groupId>
         <artifactId>Utils</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>${project.version}</version>
     </dependency>
     
     <!-- For diagnostics -->

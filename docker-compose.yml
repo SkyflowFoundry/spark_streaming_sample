@@ -1,24 +1,191 @@
 services:
+  aws-credentials-check:
+    image: amazon/aws-cli:2.15.0
+    container_name: aws-credentials-check
+    environment:
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+    entrypoint: ["/usr/local/bin/aws"]
+    command: ["sts", "get-caller-identity"]
+    restart: "no"
+    networks:
+      - sparknet
+
   zookeeper:
+    image: 'bitnami/zookeeper:3.8'
     container_name: zookeeper
-    image: confluentinc/cp-zookeeper:7.4.4
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - 22181:2181
-  
-  kafka:
-    container_name: kafka
-    image: confluentinc/cp-kafka:7.4.4
+      - '2181:2181'
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    healthcheck:
+      test: ["CMD", "zkServer.sh", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: "no"
     depends_on:
-      - zookeeper
+      aws-credentials-check:
+        condition: service_completed_successfully
+    networks:
+      - sparknet
+
+  kafka:
+    image: 'bitnami/kafka:3.6'
+    container_name: kafka
     ports:
-      - 29092:29092
+      - '29092:29092'
+      - '9092:9092'
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_DELETE_TOPIC_ENABLE=true
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: "no"
+    networks:
+      - sparknet
+
+  kafka-init:
+    image: bitnami/kafka:3.6
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Kafka to be ready..."
+        sleep 30
+        echo "Creating Kafka topic..."
+        /opt/bitnami/kafka/bin/kafka-topics.sh --create --if-not-exists --bootstrap-server kafka:9092 --replication-factor 1 --partitions 1 --topic local
+        echo "Kafka topic 'local' created successfully."
+        echo "Listing topics:"
+        /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+    restart: "no"
+    networks:
+      - sparknet
+
+  spark-master:
+    image: bitnami/spark:3.5
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_IP=spark-master
+    ports:
+      - '7077:7077'
+      - '8080:8080'
+    restart: "no"
+    networks:
+      - sparknet
+
+  spark-worker:
+    image: bitnami/spark:3.5
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=2
+    depends_on:
+      spark-master:
+        condition: service_started
+    restart: "no"
+    networks:
+      - sparknet
+
+  maven-build:
+    image: maven:3.9.6-eclipse-temurin-17
+    container_name: maven-build
+    working_dir: /usr/src/app
+    volumes:
+      - ./:/usr/src/app
+    command: ["mvn", "clean", "install"]
+    restart: "no"
+    networks:
+      - sparknet
+
+  spark-job:
+    build:
+      context: .
+      dockerfile: emr-task/Dockerfile
+    container_name: spark-job
+    environment:
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - AWS_SECRET_NAME_FOR_SA_API_KEY=${AWS_SECRET_NAME_FOR_SA_API_KEY}
+      - VAULT_ID=${VAULT_ID}
+      - VAULT_URL=${VAULT_URL}
+      - SPARK_MASTER=spark://spark-master:7077
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=local
+      - AWS_PROFILE=${AWS_PROFILE}
+      - S3_BUCKET=${S3_BUCKET}
+    depends_on:
+      aws-credentials-check:
+        condition: service_completed_successfully
+      spark-master:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_started
+    restart: "no"
+    networks:
+      - sparknet
+    entrypoint: ["/usr/src/app/run-spark-job.sh"]
+    # Uncomment the following to use your local AWS credentials/config:
+    # volumes:
+    #   - ~/.aws:/root/.aws:ro
+
+  # Producer is not started automatically. Run manually as needed:
+  # docker-compose run --rm kafka-producer
+  kafka-producer:
+    build:
+      context: .
+      dockerfile: data-gen/Dockerfile
+    container_name: kafka-producer
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=local
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - AWS_SECRET_NAME_FOR_SA_API_KEY=${AWS_SECRET_NAME_FOR_SA_API_KEY}
+      - VAULT_ID=${VAULT_ID}
+      - VAULT_URL=${VAULT_URL}
+      - AWS_PROFILE=${AWS_PROFILE}
+      - S3_BUCKET=${S3_BUCKET}
+    depends_on:
+      aws-credentials-check:
+        condition: service_completed_successfully
+    restart: "no"
+    networks:
+      - sparknet
+    entrypoint: ["/usr/src/app/run-kafka-producer.sh"]
+    # Uncomment the following to use your local AWS credentials/config:
+    # volumes:
+    #   - ~/.aws:/root/.aws:ro
+
+networks:
+  sparknet:
+    driver: bridge

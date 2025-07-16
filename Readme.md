@@ -144,3 +144,145 @@ To understand the above there are arguments that spark consumes (read `spark-sub
 ### Metrics Configuration
 - `<namespace>`: CloudWatch namespace for metrics
 - `<reporting-delay-secs>`: Metrics reporting delay
+
+# End-to-End Local Setup with Docker Compose
+
+This project supports a full local build and run using Docker Compose, including Kafka (with topic auto-creation), Spark (standalone), and automated job execution. Vault must be remote; you must provide your own AWS and Vault details.
+
+## Prerequisites
+
+- Docker and Docker Compose installed
+- AWS account with access to Secrets Manager
+- Remote Vault instance with API key stored in AWS Secrets Manager
+- Valid AWS credentials (access key, secret key, session token for temporary credentials)
+
+## Steps
+
+1. **Create Vault & Service account**
+Create a vault using the schema given in vaultSchema.json.  This works for the old style vaults.
+Also create a service account with permissions to write to the vault & create tokens (Vault
+Editor role works nicely). Get an API key for this service account.
+
+1. **Create AWS setup**
+In AWS create a secret in secrets manager. Store the Service Account API Key from above in *plaintext*.
+
+Create an S3 bucket to write into.
+
+Create an IAM User or other credentials that can read the secret, and write to this S3 bucket. Note its AWS credentials.
+
+1. **Configure Environment Variables**
+   - Create a `.env` file at the project root with the following variables:
+     ```
+     # AWS Configuration
+     AWS_REGION=us-west-2
+     AWS_ACCESS_KEY_ID=your_access_key_id
+     AWS_SECRET_ACCESS_KEY=your_secret_access_key
+     AWS_SESSION_TOKEN=your_session_token  # Required for temporary credentials
+     
+     # Vault Configuration
+     AWS_SECRET_NAME_FOR_SA_API_KEY=your_secret_name_in_aws_secrets_manager
+     VAULT_ID=your_vault_id
+     VAULT_URL=https://your_vault_url
+     
+     # S3 Configuration
+     S3_BUCKET=your_s3_bucket_name
+     ```
+   - **Important**: The secret in AWS Secrets Manager should contain just the API key (not JSON)
+   - For temporary credentials (like those from AWS SSO), all three AWS credential variables are required
+
+2. **Build All Modules**
+   - Run the helper script to build all Maven modules:
+     ```sh
+     ./build-all.sh
+     ```
+
+3. **Start the System**
+   - Bring up all services:
+     ```sh
+     docker-compose up --build
+     ```
+   - This will:
+     - **Validate AWS credentials** first (via `aws-credentials-check` service)
+     - Start Zookeeper, Kafka, Spark Master, Spark Worker
+     - Create the Kafka topic `local` automatically (via the `kafka-init` service)
+     - Build and run the Spark job (from `emr-task`), which will wait for data from Kafka
+   - If AWS credentials are invalid, the system will fail fast and show the error
+
+4. **Manually Run the Kafka Producer**
+   - The producer is NOT started automatically. To produce data to Kafka, run:
+     ```sh
+     docker-compose run --rm kafka-producer
+     ```
+   - You can run this as many times as you want to send more data.
+
+5. **Viewing Output & Logs**
+   - To see logs for any service:
+     ```sh
+     docker-compose logs -f kafka-producer
+     docker-compose logs -f spark-job
+     docker-compose logs -f aws-credentials-check
+     ```
+   - To see all logs together:
+     ```sh
+     docker-compose logs -f
+     ```
+   - To access a running container for debugging:
+     ```sh
+     docker-compose exec spark-job sh
+     ```
+   - Spark UI: [http://localhost:8080](http://localhost:8080)
+   - Kafka: Exposed on `localhost:29092`
+
+6. **Troubleshooting**
+   - **AWS Credentials Issues**: The `aws-credentials-check` service validates credentials before other services start
+   - **Environment Variable Changes**: If you update your `.env` file, restart with `docker-compose down && docker-compose up --build`
+   - **Container Restarts**: Individual services can be restarted with `docker-compose restart <service-name>`
+   - **Build Issues**: Rebuild with `./build-all.sh` if you modify Java code
+
+7. **Notes**
+   - The Kafka topic is created automatically at startup
+   - The Spark job will wait for Kafka input and process data as it arrives
+   - The Kafka producer is run manually, on demand, using `docker-compose run --rm kafka-producer`
+   - You can customize the producer or job scripts as needed in `data-gen/run-kafka-producer.sh` and `emr-task/run-spark-job.sh`
+
+---
+
+### AWS Credentials Setup
+
+This project expects AWS credentials to be available to the containers. The system includes an automatic AWS credentials validation service that runs before other services start.
+
+## Environment Variables (Recommended)
+
+Add the following to your `.env` file:
+```
+# AWS Configuration
+AWS_REGION=us-west-2
+AWS_ACCESS_KEY_ID=your_access_key_id
+AWS_SECRET_ACCESS_KEY=your_secret_access_key
+AWS_SESSION_TOKEN=your_session_token  # Required for temporary credentials
+
+# Vault Configuration
+AWS_SECRET_NAME_FOR_SA_API_KEY=your_secret_name_in_aws_secrets_manager
+VAULT_ID=your_vault_id
+VAULT_URL=https://your_vault_url
+
+# S3 Configuration
+S3_BUCKET=your_s3_bucket_name
+```
+
+**Important Notes:**
+- **Temporary Credentials**: If using temporary credentials (AWS SSO, STS, etc.), all three AWS credential variables are required
+- **Secret Format**: The secret in AWS Secrets Manager should contain just the API key string, not JSON
+- **Validation**: The `aws-credentials-check` service validates credentials using `aws sts get-caller-identity` before starting other services
+
+### Output
+
+The above process creates Hudi tables in the S3 locations give. You can read these like normal Hudi tables.
+
+# Advanced Usage (Explore on your own)
+
+You can also run this in various other combinations. e.g. you can run this on a proper, large-scale AWS MSK cluster
+and Spark Serverless job. Or, you can first pre-populate the vault with some data and then run a mix of updates and
+inserts of specified proportions.
+
+This also can be configured to log metrics to Cloudwatch.

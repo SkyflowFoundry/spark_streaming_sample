@@ -617,7 +617,10 @@ public class EmrTask {
                 .build();
 
         GetSecretValueResponse getSecretValueResponse = client.getSecretValue(getSecretValueRequest);
-        return getSecretValueResponse.secretString();
+        String secretValue = getSecretValueResponse.secretString();
+        
+        // Trim any whitespace that might be causing issues
+        return secretValue.trim();
     }
 
 	private static void printDiagnosticInfoAndFailFast(String awsRegion, String kafkaBootstrap, String outputBucket, String vault_url, boolean shortCircuitSkyflow) throws Exception {
